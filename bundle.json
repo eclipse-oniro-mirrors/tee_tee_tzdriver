@@ -1,0 +1,34 @@
+{
+    "name": "@openharmony/tee_tzdriver",
+    "version": "1.0.0",
+    "description": "TrustZone driver",
+    "private": false,
+    "scripts": {},
+    "author": {},
+    "repository": "",
+    "license": "GNU Public License v2",
+    "component": {
+      "name": "tee_tzdriver",
+      "subsystem": "tee",
+      "syscap": [],
+      "features": [],
+      "adapted_system_type": [ "small", "standard" ],
+      "rom": "400KB",
+      "ram": "400KB",
+      "deps": {
+        "components": [ 
+          "kernel",
+          "libmbedtls"
+        ],
+        "third_party": [
+          "bounds_checking_function",
+          "mbedtls"
+        ]
+      },
+      "build": {
+        "sub_component": [],
+        "inner_kits": [],
+        "test": []
+      }
+    }
+}
