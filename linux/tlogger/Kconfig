@@ -1,0 +1,25 @@
+config TEELOG
+	bool "Secure Execution Log Driver"
+	default n
+	depends on TZDRIVER
+	help
+	  TEEOS log
+
+config TEE_LOG_ACHIVE_PATH
+	string "Tee log achive path"
+	default "/data/log/tee/last_teemsg"
+	depends on TEELOG
+	help
+	  Last tee msg log path
+
+choice
+	prompt "Register tee log Mem"
+	default PAGES_MEM
+	depends on TEELOG
+
+config PAGES_MEM
+	bool "Register pages log mem"
+	help
+	  Register pages log mem
+
+endchoice

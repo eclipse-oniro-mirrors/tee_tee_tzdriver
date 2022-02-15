@@ -1,0 +1,59 @@
+# Copyright (C) 2022 Huawei Technologies Co., Ltd.
+#
+# This software is licensed under the terms of the GNU General Public
+# License version 2, as published by the Free Software Foundation, and
+# may be copied, distributed, and modified under those terms.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+
+import("//kernel/liteos_a/liteos.gni")
+
+module_switch = defined(LOSCFG_DRIVERS_TZDRIVER)
+module_name = "tzdriver"
+
+kernel_module(module_name) {
+  defines = [
+    "CONFIG_TZDRIVER=y",
+    "CONFIG_LITEOS_TZDRIVER=y",
+    "CONFIG_CPU_AFF_NR=1",
+    "CONFIG_KERNEL_CLIENT=y",
+    "CONFIG_PAGES_MEM=y",
+    "CONFIG_TEELOG=y",
+    "CONFIG_TEECD_PATH=\"/vendor/bin/teecd\"",
+  ]
+  sources = [
+    "los_adapt.c",
+    "core/agent.c",
+    "core/cmdmonitor.c",
+    "core/gp_ops.c",
+    "core/mailbox_mempool.c",
+    "core/mem.c",
+    "core/teek_client_api.c",
+    "core/session_manager.c",
+    "core/smc_smp.c",
+    "core/tc_client_driver.c",
+    "core/tzdebug.c",
+    "core/tz_spi_notify.c",
+    "tlogger/log_pages_cfg.c",
+    "tlogger/tlogger.c",
+  ]
+
+  include_dirs = [
+    ".",
+    "auth",
+    "core",
+    "include",
+    "tlogger",
+    "//third_party/mbedtls/include",
+    "//third_party/musl/porting/liteos_a/kernel",
+    "//device/hisilicon/hispark_taurus/sdk_liteos/board/include",
+  ]
+}
+
+config("public") {
+  cflags = [ "-Wno-unused-const-variable", "-Wno-unused-function" ]
+  include_dirs = [ "include" ]
+}

@@ -1,0 +1,20 @@
+menu "TEE OS"
+
+config TZDRIVER
+	tristate "Secure Execution Communicator driver"
+	default n
+	help
+	  Provides a communication interface between userspace and
+	  TrustZone Operating Environment.
+
+config ASAN_DEBUG
+	bool "ASAN debug version"
+	default n
+	help
+	  Macro defined for ASAN debug version
+
+source  "../../../../../base/tee/tee_tzdriver/linux/auth/Kconfig"
+source  "../../../../../base/tee/tee_tzdriver/linux/core/Kconfig"
+source  "../../../../../base/tee/tee_tzdriver/linux/tlogger/Kconfig"
+endmenu
+
