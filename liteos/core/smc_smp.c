@@ -58,7 +58,7 @@ enum SPI_CLK_MODE {
 };
 
 typedef struct {
-	int *nIdled;
+	int *n_idled;
 	uint64_t *ret;
 	uint64_t *exit_reason;
 	uint64_t *ta;
@@ -675,7 +675,7 @@ static noinline int smp_smc_send(uint32_t cmd, unsigned long ops, unsigned long 
 	uint32_t ret = 0;
 	bool check_value = false;
 #if CONFIG_CPU_AFF_NR
-	UINT16 oldMask;
+	UINT16 old_mask;
 #endif
 	struct smc_param param;
 	param.r0 = cmd;
@@ -694,7 +694,7 @@ static noinline int smp_smc_send(uint32_t cmd, unsigned long ops, unsigned long 
 
 RETRY:
 #if CONFIG_CPU_AFF_NR
-	set_cpu_strategy(&oldMask);
+	set_cpu_strategy(&old_mask);
 #endif
 
 	ret = do_smp_smc_send(&param);
@@ -722,7 +722,7 @@ RETRY:
 		goto RETRY;
 	}
 #if CONFIG_CPU_AFF_NR
-	restore_cpu(&oldMask);
+	restore_cpu(&old_mask);
 #endif
 	return ret;
 }
@@ -772,12 +772,12 @@ int raw_smc_send(uint32_t cmd, paddr_t cmd_addr,
 	uint32_t r0;
 
 #if (CONFIG_CPU_AFF_NR != 0)
-	UINT16 oldMask;
-	set_cpu_strategy(&oldMask);
+	UINT16 old_mask;
+	set_cpu_strategy(&old_mask);
 #endif
 	r0 = send_smc_cmd(cmd, cmd_addr, cmd_type, wait);
 #if (CONFIG_CPU_AFF_NR != 0)
-	restore_cpu(&oldMask);
+	restore_cpu(&old_mask);
 #endif
 	return r0;
 }
@@ -845,8 +845,8 @@ static int shadow_wo_pm(const void *arg, const wo_pm_params *params)
 		r2 = OsCurrTaskGet()->taskID;
 		r3 = 0;
 		r4 = 0;
-		if (*(params->nIdled) > IDLED_COUNT) {
-			*(params->nIdled) = 0;
+		if (*(params->n_idled) > IDLED_COUNT) {
+			*(params->n_idled) = 0;
 			r1 = SMC_OPS_PROBE_ALIVE;
 		}
 	}

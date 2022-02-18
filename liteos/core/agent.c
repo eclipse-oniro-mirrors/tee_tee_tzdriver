@@ -53,7 +53,7 @@ int __attribute__((weak)) is_allowed_agent_ca(const struct ca_info *ca,
 	return -EFAULT;
 }
 
-static int get_ca_path_and_uid(LosTaskCB *caTask, struct ca_info *ca)
+static int get_ca_path_and_uid(LosTaskCB *ca_task, struct ca_info *ca)
 {
 	char *path = NULL;
 	int message_size;
@@ -65,7 +65,7 @@ static int get_ca_path_and_uid(LosTaskCB *caTask, struct ca_info *ca)
 		return -ENOMEM;
 	}
 
-	path = get_process_path(caTask, tpath, MAX_PATH_SIZE);
+	path = get_process_path(ca_task, tpath, MAX_PATH_SIZE);
 	if (IS_ERR_OR_NULL(path)) {
 		tloge("get process path failed\n");
 		kfree(tpath);
@@ -80,7 +80,7 @@ static int get_ca_path_and_uid(LosTaskCB *caTask, struct ca_info *ca)
 		return -EFAULT;
 	}
 
-	ca->uid = get_task_uid(caTask);
+	ca->uid = get_task_uid(ca_task);
 	if (ca->uid < 0) {
 		kfree(tpath);
 		return -EPERM;
@@ -91,12 +91,12 @@ static int get_ca_path_and_uid(LosTaskCB *caTask, struct ca_info *ca)
 	return 0;
 }
 
-int check_ext_agent_access(LosTaskCB *caTask, uint32_t agent_id)
+int check_ext_agent_access(LosTaskCB *ca_task, uint32_t agent_id)
 {
 	int ret;
 	struct ca_info agent_ca = { {0}, 0, 0 };
 
-	ret = get_ca_path_and_uid(caTask, &agent_ca);
+	ret = get_ca_path_and_uid(ca_task, &agent_ca);
 	if (ret) {
 		tloge("get cp path or uid failed\n");
 		return ret;
