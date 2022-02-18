@@ -263,7 +263,7 @@ char *get_process_path(LosTaskCB *task, char *tpath, int path_len)
 	return tpath;
 }
 
-int calc_task_so_hash(unsigned char *digest, uint32_t digLen,
+int calc_task_so_hash(unsigned char *digest, uint32_t dig_len,
 	LosTaskCB *cur_struct, int so_index)
 {
 	tee_sha256_context ctx;
