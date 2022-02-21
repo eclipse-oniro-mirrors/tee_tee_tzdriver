@@ -46,5 +46,12 @@ static inline int register_mem_to_teeos(uint64_t mem_addr, uint32_t mem_len,
 	(void)mem_len;
 	return 0;
 }
+static inline int init_tlogger_service(void)
+{
+	return 0;
+}
+static inline void exit_tlogger_service(void)
+{
+}
 #endif
 #endif
