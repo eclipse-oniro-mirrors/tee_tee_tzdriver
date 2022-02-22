@@ -15,16 +15,28 @@ module_switch = defined(LOSCFG_DRIVERS_TZDRIVER)
 module_name = "tzdriver"
 
 kernel_module(module_name) {
+  open_tlogger_switch = true
   defines = [
     "CONFIG_TZDRIVER=y",
     "CONFIG_LITEOS_TZDRIVER=y",
     "CONFIG_CPU_AFF_NR=1",
     "CONFIG_KERNEL_CLIENT=y",
-    "CONFIG_PAGES_MEM=y",
-    "CONFIG_TEELOG=y",
     "CONFIG_TEECD_PATH=\"/vendor/bin/teecd\"",
   ]
-  sources = [
+  tlogger_sources = [
+    "tlogger/log_pages_cfg.c",
+    "tlogger/tlogger.c",
+  ]
+  if (open_tlogger_switch) {
+    defines += [
+      "CONFIG_PAGES_MEM=y",
+      "CONFIG_TEELOG=y",
+    ]
+    sources = tlogger_sources
+  } else {
+    sources = []
+  }
+  sources += [
     "los_adapt.c",
     "core/agent.c",
     "core/cmdmonitor.c",
@@ -37,10 +49,7 @@ kernel_module(module_name) {
     "core/tc_client_driver.c",
     "core/tzdebug.c",
     "core/tz_spi_notify.c",
-    "tlogger/log_pages_cfg.c",
-    "tlogger/tlogger.c",
   ]
-
   include_dirs = [
     ".",
     "auth",

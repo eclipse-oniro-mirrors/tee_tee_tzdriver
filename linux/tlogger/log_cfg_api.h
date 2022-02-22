@@ -19,8 +19,7 @@
 
 #include <linux/types.h>
 
-#if (defined(CONFIG_BBOX_MEM) || defined(CONFIG_RDR_MEM) || \
-	defined(CONFIG_PAGES_MEM))
+#if (defined(CONFIG_PAGES_MEM) && defined(CONFIG_TEELOG))
 int register_log_mem(u64 *addr, u32 *len);
 int register_log_exception(void);
 void report_log_system_error(void);
