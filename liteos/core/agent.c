@@ -58,6 +58,7 @@ static int get_ca_path_and_uid(LosTaskCB *ca_task, struct ca_info *ca)
 	char *path = NULL;
 	int message_size;
 	char *tpath = NULL;
+	int task_uid;
 
 	tpath = kmalloc(MAX_PATH_SIZE, GFP_KERNEL);
 	if (ZERO_OR_NULL_PTR((unsigned long)(uintptr_t)tpath)) {
@@ -80,11 +81,12 @@ static int get_ca_path_and_uid(LosTaskCB *ca_task, struct ca_info *ca)
 		return -EFAULT;
 	}
 
-	ca->uid = get_task_uid(ca_task);
-	if (ca->uid < 0) {
+	task_uid = get_task_uid(ca_task);
+	if (task_uid < 0) {
 		kfree(tpath);
 		return -EPERM;
 	}
+	ca->uid = (uint32_t)task_uid;
 	tlogd("ca_task->comm is %s, path is %s, ca uid is %u\n", OsCurrTaskGet()->taskName, path, ca->uid);
 
 	kfree(tpath);
