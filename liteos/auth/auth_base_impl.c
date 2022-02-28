@@ -15,7 +15,6 @@
  * GNU General Public License for more details.
  */
 #include "auth_base_impl.h"
-
 #include <securec.h>
 #include "tc_ns_log.h"
 #include "tc_ns_client.h"
