@@ -19,7 +19,6 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/rwsem.h>
-
 #include <linux/mm.h>
 #include <linux/dcache.h>
 #include <linux/mm_types.h>
