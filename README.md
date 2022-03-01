@@ -1,39 +1,52 @@
-# tee_tee_tzdriver
+# Tzdriver Module Introduction<a name="ZH-CN_TOPIC_0000001078530726"></a>
 
-#### 介绍
-{**以下是 Gitee 平台说明，您可以替换此简介**
-Gitee 是 OSCHINA 推出的基于 Git 的代码托管平台（同时支持 SVN）。专为开发者提供稳定、高效、安全的云端软件开发协作平台
-无论是个人、团队、或是企业，都能够用 Gitee 实现代码托管、项目管理、协作开发。企业项目请看 [https://gitee.com/enterprises](https://gitee.com/enterprises)}
+-   [Introduction](#section469617221261)
+-   [tzdriver project Structure](#section15884114210197)
+-   [secondary Directories structure](#section1464106163817)
 
-#### 软件架构
-软件架构说明
+## Introduction<a name="section469617221261"></a>
 
+tzdriver is a part of REE. The REE module provides a set of rich execution environment \(REE\) API components for interacting with TEEOS, including tzdriver \(driver\), libteec \(API library\), and teecd \(agent service\). This module tzdriver normally is a part of kernel, sometimes could be ko(kernel module).
 
-#### 安装教程
+## Tzdriver project Structure<a name="section15884114210197"></a>
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+tee_tzdriver：project directory
+-   README.md&README_zh.md：Introduction file
+-   LICENSE：GPL v2 LICENSE
+-   linux：tzdriver for linux kernel
+-   liteos：tzdriver for liteos_a kernel
 
-#### 使用说明
+## Secondary Directories structure<a name="section1464106163817"></a>
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+**Table 1**  tzdriver main secondary source code structure
 
-#### 参与贡献
+<a name="table2977131081412"></a>
+<table><thead align="left"><tr id="row7977610131417"><th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.1"><p id="p18792459121314"><a name="p18792459121314"></a><a name="p18792459121314"></a>main secondary directory</p>
+</th>
+<th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.2"><p id="p77921459191317"><a name="p77921459191317"></a><a name="p77921459191317"></a>description</p>
+</th>
+</tr>
+</thead>
+<tbody><tr id="row17977171010144"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p1836912441194"><a name="p1836912441194"></a><a name="p1836912441194"></a>core</p>
+</td>
+<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p2549609105"><a name="p2549609105"></a><a name="p2549609105"></a>core function code, include:smc, agent...</p>
+</td>
+</tr>
+<tr id="row6978161091412"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p64006181102"><a name="p64006181102"></a><a name="p64006181102"></a>tlogger</p>
+</td>
+<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p7456843192018"><a name="p7456843192018"></a><a name="p7456843192018"></a>for tee log</p>
+</td>
+</tr>
+<tr id="row6978201031415"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p1978910485104"><a name="p1978910485104"></a><a name="p1978910485104"></a>auth</p>
+</td>
+<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p1059035912204"><a name="p1059035912204"></a><a name="p1059035912204"></a>for authentication</p>
+</td>
+</tr>
+<tr id="row1897841071415"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p182586363119"><a name="p182586363119"></a><a name="p182586363119"></a>include</p>
+</td>
+<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p19278126102113"><a name="p19278126102113"></a><a name="p19278126102113"></a>export header files</p>
+</td>
+</tr>
+</tbody>
+</table>
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
-
-
-#### 特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
