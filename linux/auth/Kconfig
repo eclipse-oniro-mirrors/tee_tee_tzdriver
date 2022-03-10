@@ -1,0 +1,8 @@
+# Auth Configuration
+config CLIENT_AUTH
+	bool "Client Application Hash Auth"
+	default n
+	depends on TZDRIVER
+	help
+	  TEEOS CA code hash auth
+
