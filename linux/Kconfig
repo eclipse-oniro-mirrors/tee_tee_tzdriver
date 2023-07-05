@@ -13,8 +13,8 @@ config ASAN_DEBUG
 	help
 	  Macro defined for ASAN debug version
 
-source  "../../../../../base/tee/tee_tzdriver/linux/auth/Kconfig"
-source  "../../../../../base/tee/tee_tzdriver/linux/core/Kconfig"
-source  "../../../../../base/tee/tee_tzdriver/linux/tlogger/Kconfig"
+source  "../../../../base/tee/tee_tzdriver/linux/auth/Kconfig"
+source  "../../../../base/tee/tee_tzdriver/linux/core/Kconfig"
+source  "../../../../base/tee/tee_tzdriver/linux/tlogger/Kconfig"
 endmenu
 
