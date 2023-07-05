@@ -171,7 +171,12 @@ enum smc_ops_exit {
 	SMC_EXIT_PREEMPTED      = 0x1,
 	SMC_EXIT_SHADOW         = 0x2,
 	SMC_EXIT_ABORT          = 0x3,
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	SMC_EXIT_CRASH          = 0x4,
+	SMC_EXIT_MAX            = 0x5,
+#else
 	SMC_EXIT_MAX            = 0x4,
+#endif
 };
 
 #define SHADOW_EXIT_RUN             0x1234dead
@@ -704,10 +709,38 @@ static void set_smc_send_arg(struct smc_in_params *in_param,
 		in_param->x2, in_param->x3, in_param->x4);
 }
 
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+static void fix_params_offset(struct smc_out_params *out_param)
+{
+	out_param->target = out_param->ta;
+	out_param->ta = out_param->exit_reason;
+	out_param->exit_reason = out_param->ret;
+	out_param->ret = TSP_RESPONSE;
+	if (out_param->exit_reason == SMC_EXIT_CRASH) {
+		union crash_inf temp_info;
+		temp_info.crash_reg[0] = out_param->ta;
+		temp_info.crash_reg[1] = 0;
+		temp_info.crash_reg[2] = out_param->target;
+		temp_info.crash_msg.far = temp_info.crash_msg.elr;
+		temp_info.crash_msg.elr = 0;
+		out_param->ret = TSP_CRASH;
+		out_param->exit_reason = temp_info.crash_reg[0];
+		out_param->ta = temp_info.crash_reg[1];
+		out_param->target = temp_info.crash_reg[2];
+	}
+}
+#endif
+
 #ifndef CONFIG_ARM
 static void send_asm_smc_cmd(struct smc_in_params *in_param,
 	struct smc_out_params *out_param)
 {
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	if (g_sys_crash) {
+		out_param->ret = TSP_CRASH;
+		return;
+	}
+#endif
 	do {
 		asm volatile(
 			"mov x0, %[fid]\n"
@@ -738,6 +771,12 @@ static void send_asm_smc_cmd(struct smc_in_params *in_param,
 static void send_asm_smc_cmd(struct smc_in_params *in_param,
 	struct smc_out_params *out_param)
 {
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	if (g_sys_crash) {
+		out_param->ret = TSP_CRASH;
+		return;
+	}
+#endif
 	do {
 		asm volatile(
 			"mov r0, %[fid]\n"
@@ -786,6 +825,9 @@ retry:
 		raw_smp_processor_id(), out_param.ret, out_param.exit_reason,
 		out_param.ta, out_param.target);
 
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	fix_params_offset(&out_param);
+#endif
 	secret->exit = out_param.exit_reason;
 	secret->ta = out_param.ta;
 	secret->target = out_param.target;
@@ -821,6 +863,7 @@ static uint64_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr,
 {
 	struct smc_in_params in_param = { cmd, cmd_addr, cmd_type, cmd_addr >> ADDR_TRANS_NUM };
 	uint64_t ret = 0;
+	uint64_t ret1 = 0;
 
 	do {
 		asm volatile(
@@ -830,15 +873,21 @@ static uint64_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr,
 			"mov x3, %[a3]\n"
 			"mov x4, %[a4]\n"
 			"smc #0\n"
-			"str x0, [%[re0]]\n":
+			"str x0, [%[re0]]\n"
+			"str x1, [%[re1]]\n":
 			[fid] "+r"(in_param.x0),
 			[a1] "+r"(in_param.x1),
 			[a2] "+r"(in_param.x2),
 			[a3] "+r"(in_param.x3),
 			[a4] "+r"(in_param.x0):
-			[re0] "r"(&ret):
+			[re0] "r"(&ret),
+			[re1] "r"(&ret1):
 			"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7");
-	} while (ret == TSP_REQUEST && wait);
+#ifndef CONFIG_THIRDPARTY_COMPATIBLE
+	} while (ret == TSP_RESPONSE && ret1 == SMC_EXIT_PREEMPTED && wait);
+#else
+	} while ((ret == SMC_EXIT_PREEMPTED) && wait);
+#endif
 
 	isb();
 	wmb();
@@ -851,6 +900,7 @@ static uint32_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr,
 {
 	struct smc_in_params in_param = { cmd, cmd_addr, cmd_type, (uint64_t)cmd_addr >> ADDR_TRANS_NUM };
 	uint32_t ret = 0;
+	uint32_t ret1 = 0;
 
 	do {
 		asm volatile(
@@ -861,15 +911,21 @@ static uint32_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr,
 			"mov r4, %[a4]\n"
 			".arch_extension sec\n"
 			"smc #0\n"
-			"str r0, [%[re0]]\n" :
+			"str r0, [%[re0]]\n"
+			"str r1, [%[re1]]\n" :
 			[fid] "+r"(in_param.x0),
 			[a1] "+r"(in_param.x1),
 			[a2] "+r"(in_param.x2),
 			[a3] "+r"(in_param.x3),
 			[a4] "+r"(in_param.x0) :
-			[re0] "r"(&ret) :
+			[re0] "r"(&ret) ,
+			[re1] "r"(&ret1) :
 			"r0", "r1", "r2", "r3", "r4");
-	} while (ret == TSP_REQUEST && wait);
+#ifndef CONFIG_THIRDPARTY_COMPATIBLE
+	} while (ret == TSP_RESPONSE && ret1 == SMC_EXIT_PREEMPTED && wait);
+#else
+	} while ((ret == SMC_EXIT_PREEMPTED) && wait);
+#endif
 
 	isb();
 	wmb();
@@ -1029,6 +1085,12 @@ static void shadow_wo_pm(const void *arg, struct smc_out_params *out_params,
 	tlogd("%s: [cpu %d] x0=%lx x1=%lx x2=%lx x3=%lx x4=%lx\n",
 		__func__, raw_smp_processor_id(), in_params.x0, in_params.x1,
 		in_params.x2, in_params.x3, in_params.x4);
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	if (g_sys_crash) {
+		out_params->ret = TSP_CRASH;
+		return;
+	}
+#endif
 	do {
 		asm volatile(
 			"mov x0, %[fid]\n"
@@ -1070,6 +1132,12 @@ static void shadow_wo_pm(const void *arg, struct smc_out_params *out_params,
 	tlogd("%s: [cpu %d] x0=%lx x1=%lx x2=%lx x3=%lx x4=%lx\n",
 		__func__, raw_smp_processor_id(), in_params.x0, in_params.x1,
 		in_params.x2, in_params.x3, in_params.x4);
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	if (g_sys_crash) {
+		out_params->ret = TSP_CRASH;
+		return;
+	}
+#endif
 	do {
 		asm volatile(
 			"mov r0, %[fid]\n"
@@ -1185,6 +1253,9 @@ static int shadow_thread_fn(void *arg)
 
 retry_wo_pm:
 	shadow_wo_pm(arg, &params, &n_idled);
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	fix_params_offset(&params);
+#endif
 	if (check_shadow_crash(params.ret, &ret))
 		goto clean_wo_pm;
 

@@ -25,13 +25,20 @@
 #include "tc_ns_client.h"
 #include "tc_ns_log.h"
 
+#define CONFIG_THIRDPARTY_COMPATIBLE
+
 #define TC_NS_CLIENT_IOC_MAGIC  't'
 #define TC_NS_CLIENT_DEV        "tc_ns_client"
 #define TC_NS_CLIENT_DEV_NAME   "/dev/tc_ns_client"
 
 #define EXCEPTION_MEM_SIZE (8*1024) /* mem for exception handling */
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+#define TSP_REQUEST        0x32000008
+#define TSP_RESPONSE       0xBE000005
+#else
 #define TSP_REQUEST        0xB2000008
 #define TSP_RESPONSE       0xB2000009
+#endif
 #define TSP_REE_SIQ        0xB200000A
 #define TSP_CRASH          0xB200000B
 #define TSP_PREEMPTED      0xB2000005
