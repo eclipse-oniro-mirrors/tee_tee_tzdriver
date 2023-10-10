@@ -3,18 +3,21 @@
  *
  * function for sending smc cmd
  *
- * Copyright (C) 2022 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
  *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
 #include "smc_smp.h"
+#include <linux/of.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
@@ -51,6 +54,11 @@
 #include <chipset_common/security/hw_kernel_stp_interface.h>
 #endif
 
+#ifdef CONFIG_TEE_LOG_EXCEPTION
+#include <huawei_platform/log/imonitor.h>
+#define IMONITOR_TA_CRASH_EVENT_ID 901002003
+#endif
+
 #include "tc_ns_log.h"
 #include "teek_client_constants.h"
 #include "tc_ns_client.h"
@@ -61,8 +69,15 @@
 #include "tlogger.h"
 #include "ko_adapt.h"
 #include "log_cfg_api.h"
-#include "tz_kthread_affinity.h"
 #include "tee_compat_check.h"
+#include "secs_power_ctrl.h"
+#include "shared_mem.h"
+#include "tui.h"
+#include "internal_functions.h"
+#ifdef CONFIG_SMC_HOOK
+#include "smc_hook.h"
+#endif
+#include "smc_call.h"
 
 #define PREEMPT_COUNT            10000
 #define HZ_COUNT                 10
@@ -93,22 +108,7 @@
 #define MAX_SIQ_NUM 4
 
 /* Current state of the system */
-static uint8_t g_sys_crash;
-
-struct smc_in_params {
-	unsigned long x0;
-	unsigned long x1;
-	unsigned long x2;
-	unsigned long x3;
-	unsigned long x4;
-};
-
-struct smc_out_params {
-	unsigned long ret;
-	unsigned long exit_reason;
-	unsigned long ta;
-	unsigned long target;
-};
+static bool g_sys_crash;
 
 struct shadow_work {
 	struct kthread_work kthwork;
@@ -133,7 +133,7 @@ struct cmd_reuse_info {
 	enum cmd_reuse cmd_usage;
 };
 
-#if CONFIG_CPU_AFF_NR
+#if (CONFIG_CPU_AFF_NR != 0)
 static struct cpumask g_cpu_mask;
 static int g_mask_flag = 0;
 #endif
@@ -155,11 +155,6 @@ static atomic_t g_siq_th_run;
 static uint32_t g_siq_queue[MAX_SIQ_NUM];
 DEFINE_MUTEX(g_siq_lock);
 
-enum {
-	TYPE_CRASH_TA  = 1,
-	TYPE_CRASH_TEE = 2,
-};
-
 enum smc_ops_exit {
 	SMC_OPS_NORMAL   = 0x0,
 	SMC_OPS_SCHEDTO  = 0x1,
@@ -171,12 +166,7 @@ enum smc_ops_exit {
 	SMC_EXIT_PREEMPTED      = 0x1,
 	SMC_EXIT_SHADOW         = 0x2,
 	SMC_EXIT_ABORT          = 0x3,
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	SMC_EXIT_CRASH          = 0x4,
-	SMC_EXIT_MAX            = 0x5,
-#else
 	SMC_EXIT_MAX            = 0x4,
-#endif
 };
 
 #define SHADOW_EXIT_RUN             0x1234dead
@@ -185,8 +175,8 @@ enum smc_ops_exit {
 #define SYM_NAME_LEN_MAX 16
 #define SYM_NAME_LEN_1 7
 #define SYM_NAME_LEN_2 4
-#define CRASH_REG_NUM  3
-#define LOW_FOUR_BITE  4
+#define CRASH_REG_NUM 3
+#define LOW_FOUR_BITE 4
 
 union crash_inf {
 	uint64_t crash_reg[CRASH_REG_NUM];
@@ -205,12 +195,40 @@ union crash_inf {
 	} crash_msg;
 };
 
-#define compile_time_assert(cond, msg) typedef char ASSERT_##msg[(cond) ? 1 : -1]
+#define compile_time_assert(cond, msg) typedef char g_assert_##msg[(cond) ? 1 : -1]
 
 #ifndef CONFIG_BIG_SESSION
 compile_time_assert(sizeof(struct tc_ns_smc_queue) <= PAGE_SIZE,
 	size_of_tc_ns_smc_queue_too_large);
 #endif
+
+static bool g_reserved_cmd_buffer = false;
+static u64 g_cmd_size = 0;
+static bool g_tz_uefi_enable = false;
+
+static int __init tz_check_uefi_enable_func(char *str)
+{
+	if (str != NULL && *str == '1')
+		g_tz_uefi_enable = true;
+
+	return 0;
+}
+early_param("tz_uefi_enable", tz_check_uefi_enable_func);
+
+#define MIN_CMDLINE_SIZE 0x1000
+static int reserved_cmdline(struct reserved_mem *rmem)
+{
+	if (g_tz_uefi_enable && rmem && rmem->size >= MIN_CMDLINE_SIZE) {
+		g_cmd_phys = rmem->base;
+		g_cmd_size = rmem->size;
+		g_reserved_cmd_buffer = true;
+	} else {
+		g_reserved_cmd_buffer = false;
+	}
+
+	return 0;
+}
+RESERVEDMEM_OF_DECLARE(g_teeos_cmdline, "teeos-cmdline", reserved_cmdline);
 
 static void acquire_smc_buf_lock(smc_buf_lock_t *lock)
 {
@@ -218,8 +236,8 @@ static void acquire_smc_buf_lock(smc_buf_lock_t *lock)
 
 	preempt_disable();
 	do
-		ret = cmpxchg(lock, 0, 1);
-	while (ret);
+		ret = (int)cmpxchg(lock, 0, 1);
+	while (ret != 0);
 }
 
 static inline void release_smc_buf_lock(smc_buf_lock_t *lock)
@@ -230,20 +248,12 @@ static inline void release_smc_buf_lock(smc_buf_lock_t *lock)
 
 static void occupy_setbit_smc_in_doing_entry(int32_t i, int32_t *idx)
 {
-	g_cmd_data->in[i].event_nr = i;
+	g_cmd_data->in[i].event_nr = (unsigned int)i;
 	isb();
 	wmb();
-	set_bit(i, (unsigned long *)g_cmd_data->in_bitmap);
-	set_bit(i, (unsigned long *)g_cmd_data->doing_bitmap);
+	set_bit((unsigned int)i, (unsigned long *)g_cmd_data->in_bitmap);
+	set_bit((unsigned int)i, (unsigned long *)g_cmd_data->doing_bitmap);
 	*idx = i;
-}
-
-static void occupy_clean_in_doing_entry(int32_t i)
-{
-	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
-	clear_bit(i, (unsigned long *)g_cmd_data->in_bitmap);
-	clear_bit(i, (unsigned long *)g_cmd_data->doing_bitmap);
-	release_smc_buf_lock(&g_cmd_data->smc_lock);
 }
 
 static int occupy_free_smc_in_entry(const struct tc_ns_smc_cmd *cmd)
@@ -271,7 +281,7 @@ static int occupy_free_smc_in_entry(const struct tc_ns_smc_cmd *cmd)
 get_smc_retry:
 	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
 	for (i = 0; i < MAX_SMC_CMD; i++) {
-		if (test_bit(i, (unsigned long *)g_cmd_data->in_bitmap))
+		if (test_bit(i, (unsigned long *)g_cmd_data->in_bitmap) != 0)
 			continue;
 		if (memcpy_s(&g_cmd_data->in[i], sizeof(g_cmd_data->in[i]),
 			cmd, sizeof(*cmd)) != EOK) {
@@ -296,7 +306,7 @@ get_smc_retry:
 	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
 	isb();
 	wmb();
-	clear_bit(idx, (unsigned long *)g_cmd_data->doing_bitmap);
+	clear_bit((uint32_t)idx, (unsigned long *)g_cmd_data->doing_bitmap);
 	release_smc_buf_lock(&g_cmd_data->smc_lock);
 	return idx;
 }
@@ -306,20 +316,19 @@ static int reuse_smc_in_entry(uint32_t idx)
 	int rc = 0;
 
 	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
-	if (!(test_bit(idx, (unsigned long *)g_cmd_data->in_bitmap) &&
-		test_bit(idx, (unsigned long *)g_cmd_data->doing_bitmap))) {
+	if (!(test_bit((int32_t)idx, (unsigned long *)g_cmd_data->in_bitmap) != 0 &&
+		test_bit((int32_t)idx, (unsigned long *)g_cmd_data->doing_bitmap) != 0)) {
 		tloge("invalid cmd to reuse\n");
 		rc = -1;
 		goto out;
 	}
 	if (memcpy_s(&g_cmd_data->in[idx], sizeof(g_cmd_data->in[idx]),
-		&g_cmd_data->out[idx], sizeof(g_cmd_data->out[idx]))) {
+		&g_cmd_data->out[idx], sizeof(g_cmd_data->out[idx])) != EOK) {
 		tloge("memcpy failed,%s line:%d", __func__, __LINE__);
 		rc = -1;
 		goto out;
 	}
-	release_smc_buf_lock(&g_cmd_data->smc_lock);
-	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
+
 	isb();
 	wmb();
 	clear_bit(idx, (unsigned long *)g_cmd_data->doing_bitmap);
@@ -332,14 +341,14 @@ static int copy_smc_out_entry(uint32_t idx, struct tc_ns_smc_cmd *copy,
 	enum cmd_reuse *usage)
 {
 	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
-	if (!test_bit(idx, (unsigned long *)g_cmd_data->out_bitmap)) {
+	if (test_bit((int)idx, (unsigned long *)g_cmd_data->out_bitmap) == 0) {
 		tloge("cmd out %u is not ready\n", idx);
 		release_smc_buf_lock(&g_cmd_data->smc_lock);
 		show_cmd_bitmap();
 		return -ENOENT;
 	}
 	if (memcpy_s(copy, sizeof(*copy), &g_cmd_data->out[idx],
-		sizeof(g_cmd_data->out[idx]))) {
+		sizeof(g_cmd_data->out[idx])) != EOK) {
 		tloge("copy smc out failed\n");
 		release_smc_buf_lock(&g_cmd_data->smc_lock);
 		return -EFAULT;
@@ -347,8 +356,8 @@ static int copy_smc_out_entry(uint32_t idx, struct tc_ns_smc_cmd *copy,
 
 	isb();
 	wmb();
-	if (g_cmd_data->out[idx].ret_val == TEEC_PENDING2 ||
-		g_cmd_data->out[idx].ret_val == TEEC_PENDING) {
+	if (g_cmd_data->out[idx].ret_val == (int)TEEC_PENDING2 ||
+		g_cmd_data->out[idx].ret_val == (int)TEEC_PENDING) {
 		*usage = RESEND;
 	} else {
 		clear_bit(idx, (unsigned long *)g_cmd_data->in_bitmap);
@@ -382,10 +391,17 @@ static bool is_cmd_working_done(uint32_t idx)
 	bool ret = false;
 
 	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
-	if (test_bit(idx, (unsigned long *)g_cmd_data->out_bitmap))
+	if (test_bit((int)idx, (unsigned long *)g_cmd_data->out_bitmap) != 0)
 		ret = true;
 	release_smc_buf_lock(&g_cmd_data->smc_lock);
 	return ret;
+}
+
+void occupy_clean_cmd_buf(void)
+{
+	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
+	memset_s(g_cmd_data, sizeof(struct tc_ns_smc_queue), 0, sizeof(struct tc_ns_smc_queue));
+	release_smc_buf_lock(&g_cmd_data->smc_lock);
 }
 
 static void show_in_bitmap(int *cmd_in, uint32_t len)
@@ -398,15 +414,15 @@ static void show_in_bitmap(int *cmd_in, uint32_t len)
 		return;
 
 	for (idx = 0; idx < MAX_SMC_CMD; idx++) {
-		if (test_bit(idx, (unsigned long *)g_cmd_data->in_bitmap)) {
+		if (test_bit((int32_t)idx, (unsigned long *)g_cmd_data->in_bitmap) != 0) {
 			bitmap[idx] = '1';
-			cmd_in[in++] = idx;
+			cmd_in[in++] = (int)idx;
 		} else {
 			bitmap[idx] = '0';
 		}
 	}
 	bitmap[MAX_SMC_CMD] = '\0';
-	tloge("in bitmap: %s\n", bitmap);
+	tlogi("in bitmap: %s\n", bitmap);
 }
 
 static void show_out_bitmap(int *cmd_out, uint32_t len)
@@ -419,15 +435,15 @@ static void show_out_bitmap(int *cmd_out, uint32_t len)
 		return;
 
 	for (idx = 0; idx < MAX_SMC_CMD; idx++) {
-		if (test_bit(idx, (unsigned long *)g_cmd_data->out_bitmap)) {
+		if (test_bit((int32_t)idx, (unsigned long *)g_cmd_data->out_bitmap) != 0) {
 			bitmap[idx] = '1';
-			cmd_out[out++] = idx;
+			cmd_out[out++] = (int)idx;
 		} else {
 			bitmap[idx] = '0';
 		}
 	}
 	bitmap[MAX_SMC_CMD] = '\0';
-	tloge("out bitmap: %s\n", bitmap);
+	tlogi("out bitmap: %s\n", bitmap);
 }
 
 static void show_doing_bitmap(void)
@@ -438,16 +454,16 @@ static void show_doing_bitmap(void)
 	if (!g_cmd_data)
 		return;
 	for (idx = 0; idx < MAX_SMC_CMD; idx++) {
-		if (test_bit(idx, (unsigned long *)g_cmd_data->doing_bitmap))
+		if (test_bit((int)idx, (unsigned long *)g_cmd_data->doing_bitmap) != 0)
 			bitmap[idx] = '1';
 		else
 			bitmap[idx] = '0';
 	}
 	bitmap[MAX_SMC_CMD] = '\0';
-	tloge("doing bitmap: %s\n", bitmap);
+	tlogi("doing bitmap: %s\n", bitmap);
 }
 
-static void show_single_cmd_info(int *cmd, uint32_t len)
+static void show_single_cmd_info(const int *cmd, uint32_t len)
 {
 	uint32_t idx;
 
@@ -457,7 +473,7 @@ static void show_single_cmd_info(int *cmd, uint32_t len)
 	for (idx = 0; idx < MAX_SMC_CMD; idx++) {
 		if (cmd[idx] == -1)
 			break;
-		tloge("cmd[%d]: cmd_id=%u, ca_pid=%u, dev_id = 0x%x, "
+		tlogi("cmd[%d]: cmd_id=%u, ca_pid=%u, dev_id = 0x%x, "
 			"event_nr=%u, ret_val=0x%x\n",
 			cmd[idx],
 			g_cmd_data->in[cmd[idx]].cmd_id,
@@ -486,8 +502,8 @@ void show_cmd_bitmap(void)
 		return;
 	}
 
-	if (memset_s(cmd_in, sizeof(int)* MAX_SMC_CMD, MAX_CHAR, sizeof(int)* MAX_SMC_CMD) ||
-		memset_s(cmd_out, sizeof(int)* MAX_SMC_CMD, MAX_CHAR, sizeof(int)* MAX_SMC_CMD)) {
+	if (memset_s(cmd_in, sizeof(int)* MAX_SMC_CMD, MAX_CHAR, sizeof(int)* MAX_SMC_CMD) != 0 ||
+		memset_s(cmd_out, sizeof(int)* MAX_SMC_CMD, MAX_CHAR, sizeof(int)* MAX_SMC_CMD) != 0) {
 		tloge("memset failed\n");
 		goto error;
 	}
@@ -498,10 +514,10 @@ void show_cmd_bitmap(void)
 	show_doing_bitmap();
 	show_out_bitmap(cmd_out, MAX_SMC_CMD);
 
-	tloge("cmd in value:\n");
+	tlogi("cmd in value:\n");
 	show_single_cmd_info(cmd_in, MAX_SMC_CMD);
 
-	tloge("cmd_out value:\n");
+	tlogi("cmd_out value:\n");
 	show_single_cmd_info(cmd_out, MAX_SMC_CMD);
 
 	release_smc_buf_lock(&g_cmd_data->smc_lock);
@@ -630,6 +646,7 @@ static bool match_ta_affinity(struct pending_entry *pe)
 #else
 static inline bool match_ta_affinity(struct pending_entry *pe)
 {
+	(void)pe;
 	return false;
 }
 #endif
@@ -649,8 +666,8 @@ bool sigkill_pending(struct task_struct *tsk)
 		return false;
 	}
 
-	flag = sigismember(&tsk->pending.signal, SIGKILL) ||
-		sigismember(&tsk->pending.signal, SIGUSR1);
+	flag = (sigismember(&tsk->pending.signal, SIGKILL) != 0) ||
+		(sigismember(&tsk->pending.signal, SIGUSR1) != 0);
 
 	if (tsk->signal)
 		return flag || sigismember(&tsk->signal->shared_pending.signal,
@@ -658,12 +675,12 @@ bool sigkill_pending(struct task_struct *tsk)
 	return flag;
 }
 
-#if CONFIG_CPU_AFF_NR
+#if (CONFIG_CPU_AFF_NR != 0)
 static void set_cpu_strategy(struct cpumask *old_mask)
 {
 	unsigned int i;
 
-	if (!g_mask_flag) {
+	if (g_mask_flag == 0) {
 		cpumask_clear(&g_cpu_mask);
 		for (i = 0; i < CONFIG_CPU_AFF_NR; i++)
 			cpumask_set_cpu(i, &g_cpu_mask);
@@ -674,7 +691,7 @@ static void set_cpu_strategy(struct cpumask *old_mask)
 }
 #endif
 
-#if CONFIG_CPU_AFF_NR
+#if (CONFIG_CPU_AFF_NR != 0)
 static void restore_cpu(struct cpumask *old_mask)
 {
 	/* current equal old means no set cpu affinity, no need to restore */
@@ -709,96 +726,47 @@ static void set_smc_send_arg(struct smc_in_params *in_param,
 		in_param->x2, in_param->x3, in_param->x4);
 }
 
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-static void fix_params_offset(struct smc_out_params *out_param)
+static void send_asm_smc_cmd(struct smc_in_params *in_param, struct smc_out_params *out_param)
 {
-	out_param->target = out_param->ta;
-	out_param->ta = out_param->exit_reason;
-	out_param->exit_reason = out_param->ret;
-	out_param->ret = TSP_RESPONSE;
-	if (out_param->exit_reason == SMC_EXIT_CRASH) {
-		union crash_inf temp_info;
-		temp_info.crash_reg[0] = out_param->ta;
-		temp_info.crash_reg[1] = 0;
-		temp_info.crash_reg[2] = out_param->target;
-		temp_info.crash_msg.far = temp_info.crash_msg.elr;
-		temp_info.crash_msg.elr = 0;
-		out_param->ret = TSP_CRASH;
-		out_param->exit_reason = temp_info.crash_reg[0];
-		out_param->ta = temp_info.crash_reg[1];
-		out_param->target = temp_info.crash_reg[2];
-	}
+	smc_req(in_param, out_param, 0);
 }
-#endif
 
-#ifndef CONFIG_ARM
-static void send_asm_smc_cmd(struct smc_in_params *in_param,
-	struct smc_out_params *out_param)
+#ifdef CONFIG_TEE_REBOOT
+int send_smc_cmd_rebooting(uint32_t cmd_id, phys_addr_t cmd_addr, uint32_t cmd_type, const struct tc_ns_smc_cmd *in_cmd)
 {
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	if (g_sys_crash) {
-		out_param->ret = TSP_CRASH;
-		return;
+	struct tc_ns_smc_cmd cmd = { {0}, 0 };
+	struct smc_in_params in_param = {cmd_id, cmd_addr, cmd_type, cmd_addr >> ADDR_TRANS_NUM, TEE_ERROR_IS_DEAD};
+	struct smc_out_params out_param = {0};
+
+	if (in_cmd != NULL) {
+		if (memcpy_s(&cmd, sizeof(cmd), in_cmd, sizeof(*in_cmd)) != EOK) {
+			tloge("memcpy in cmd failed\n");
+			return -EFAULT;
+		}
+		if (occupy_free_smc_in_entry(&cmd) == -1) {
+			tloge("there's no more smc entry\n");
+			return -ENOMEM;
+		}
 	}
-#endif
-	do {
-		asm volatile(
-			"mov x0, %[fid]\n"
-			"mov x1, %[a1]\n"
-			"mov x2, %[a2]\n"
-			"mov x3, %[a3]\n"
-			"mov x4, %[a4]\n"
-			"smc #0\n"
-			"str x0, [%[re0]]\n"
-			"str x1, [%[re1]]\n"
-			"str x2, [%[re2]]\n"
-			"str x3, [%[re3]]\n" :
-			[fid] "+r"(in_param->x0),
-			[a1] "+r"(in_param->x1),
-			[a2] "+r"(in_param->x2),
-			[a3] "+r"(in_param->x3),
-			[a4] "+r"(in_param->x4) :
-			[re0] "r"(&out_param->ret),
-			[re1] "r"(&out_param->exit_reason),
-			[re2] "r"(&out_param->ta),
-			[re3] "r"(&out_param->target) :
-			"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-			"x8", "x9", "x10", "x11", "x12", "x13",
-			"x14", "x15", "x16", "x17");
-	} while (0);
+retry:
+	isb();
+	wmb();
+	send_asm_smc_cmd(&in_param, &out_param);
+	isb();
+	wmb();
+	if (out_param.exit_reason == SMC_EXIT_PREEMPTED)
+		goto retry;
+
+	return out_param.exit_reason;
 }
 #else
-static void send_asm_smc_cmd(struct smc_in_params *in_param,
-	struct smc_out_params *out_param)
+int send_smc_cmd_rebooting(uint32_t cmd_id, phys_addr_t cmd_addr, uint32_t cmd_type, const struct tc_ns_smc_cmd *in_cmd)
 {
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	if (g_sys_crash) {
-		out_param->ret = TSP_CRASH;
-		return;
-	}
-#endif
-	do {
-		asm volatile(
-			"mov r0, %[fid]\n"
-			"mov r1, %[a1]\n"
-			"mov r2, %[a2]\n"
-			"mov r3, %[a3]\n"
-			".arch_extension sec\n"
-			"smc #0\n"
-			"str r0, [%[re0]]\n"
-			"str r1, [%[re1]]\n"
-			"str r2, [%[re2]]\n"
-			"str r3, [%[re3]]\n" :
-			[fid] "+r"(in_param->x0),
-			[a1] "+r"(in_param->x1),
-			[a2] "+r"(in_param->x2),
-			[a3] "+r"(in_param->x3):
-			[re0] "r"(&out_param->ret),
-			[re1] "r"(&out_param->exit_reason),
-			[re2] "r"(&out_param->ta),
-			[re3] "r"(&out_param->target) :
-			"r0", "r1", "r2", "r3");
-	} while (0);
+	(void)cmd_id;
+	(void)cmd_addr;
+	(void)cmd_type;
+	(void)in_cmd;
+	return 0;
 }
 #endif
 
@@ -807,27 +775,22 @@ static noinline int smp_smc_send(uint32_t cmd, unsigned long ops, unsigned long 
 {
 	struct smc_in_params in_param = { cmd, ops, ca, 0, 0 };
 	struct smc_out_params out_param = {0};
-#if CONFIG_CPU_AFF_NR
+#if (CONFIG_CPU_AFF_NR != 0)
 	struct cpumask old_mask;
 #endif
 
-#if CONFIG_CPU_AFF_NR
+#if (CONFIG_CPU_AFF_NR != 0)
 	set_cpu_strategy(&old_mask);
 #endif
 retry:
 	set_smc_send_arg(&in_param, secret, ops);
-	isb();
-	wmb();
+	tee_trace_add_event(SMC_SEND, 0);
 	send_asm_smc_cmd(&in_param, &out_param);
-	isb();
-	wmb();
+	tee_trace_add_event(SMC_DONE, 0);
 	tlogd("[cpu %d] return val %lx exit_reason %lx ta %lx targ %lx\n",
 		raw_smp_processor_id(), out_param.ret, out_param.exit_reason,
 		out_param.ta, out_param.target);
 
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	fix_params_offset(&out_param);
-#endif
 	secret->exit = out_param.exit_reason;
 	secret->ta = out_param.ta;
 	secret->target = out_param.target;
@@ -851,90 +814,23 @@ retry:
 			goto retry;
 		}
 	}
-#if CONFIG_CPU_AFF_NR
+#if (CONFIG_CPU_AFF_NR != 0)
 	restore_cpu(&old_mask);
 #endif
-	return out_param.ret;
+	return (int)out_param.ret;
 }
 
-#ifndef CONFIG_ARM
-static uint64_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr,
-	uint32_t cmd_type, uint8_t wait)
+static uint64_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr, uint32_t cmd_type, uint8_t wait)
 {
-	struct smc_in_params in_param = { cmd, cmd_addr, cmd_type, cmd_addr >> ADDR_TRANS_NUM };
 	uint64_t ret = 0;
-	uint64_t ret1 = 0;
-
-	do {
-		asm volatile(
-			"mov x0, %[fid]\n"
-			"mov x1, %[a1]\n"
-			"mov x2, %[a2]\n"
-			"mov x3, %[a3]\n"
-			"mov x4, %[a4]\n"
-			"smc #0\n"
-			"str x0, [%[re0]]\n"
-			"str x1, [%[re1]]\n":
-			[fid] "+r"(in_param.x0),
-			[a1] "+r"(in_param.x1),
-			[a2] "+r"(in_param.x2),
-			[a3] "+r"(in_param.x3),
-			[a4] "+r"(in_param.x0):
-			[re0] "r"(&ret),
-			[re1] "r"(&ret1):
-			"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7");
-#ifndef CONFIG_THIRDPARTY_COMPATIBLE
-	} while (ret == TSP_RESPONSE && ret1 == SMC_EXIT_PREEMPTED && wait);
-#else
-	} while ((ret == SMC_EXIT_PREEMPTED) && wait);
-#endif
-
-	isb();
-	wmb();
-
+	struct smc_in_params in_param = { cmd, cmd_addr, cmd_type, cmd_addr >> ADDR_TRANS_NUM };
+	struct smc_out_params out_param = { ret };
+	smc_req(&in_param, &out_param, wait);
+	ret = out_param.ret;
 	return ret;
 }
-#else
-static uint32_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr,
-	uint32_t cmd_type, uint8_t wait)
-{
-	struct smc_in_params in_param = { cmd, cmd_addr, cmd_type, (uint64_t)cmd_addr >> ADDR_TRANS_NUM };
-	uint32_t ret = 0;
-	uint32_t ret1 = 0;
 
-	do {
-		asm volatile(
-			"mov r0, %[fid]\n"
-			"mov r1, %[a1]\n"
-			"mov r2, %[a2]\n"
-			"mov r3, %[a3]\n"
-			"mov r4, %[a4]\n"
-			".arch_extension sec\n"
-			"smc #0\n"
-			"str r0, [%[re0]]\n"
-			"str r1, [%[re1]]\n" :
-			[fid] "+r"(in_param.x0),
-			[a1] "+r"(in_param.x1),
-			[a2] "+r"(in_param.x2),
-			[a3] "+r"(in_param.x3),
-			[a4] "+r"(in_param.x0) :
-			[re0] "r"(&ret) ,
-			[re1] "r"(&ret1) :
-			"r0", "r1", "r2", "r3", "r4");
-#ifndef CONFIG_THIRDPARTY_COMPATIBLE
-	} while (ret == TSP_RESPONSE && ret1 == SMC_EXIT_PREEMPTED && wait);
-#else
-	} while ((ret == SMC_EXIT_PREEMPTED) && wait);
-#endif
-
-	isb();
-	wmb();
-
-	return ret;
-}
-#endif
-
-unsigned long raw_smc_send(uint32_t cmd, phys_addr_t cmd_addr,
+static unsigned long raw_smc_send(uint32_t cmd, phys_addr_t cmd_addr,
 	uint32_t cmd_type, uint8_t wait)
 {
 	unsigned long x0;
@@ -943,7 +839,9 @@ unsigned long raw_smc_send(uint32_t cmd, phys_addr_t cmd_addr,
 	struct cpumask old_mask;
 	set_cpu_strategy(&old_mask);
 #endif
+
 	x0 = send_smc_cmd(cmd, cmd_addr, cmd_type, wait);
+
 #if (CONFIG_CPU_AFF_NR != 0)
 	restore_cpu(&old_mask);
 #endif
@@ -952,7 +850,13 @@ unsigned long raw_smc_send(uint32_t cmd, phys_addr_t cmd_addr,
 
 static void siq_dump(phys_addr_t mode, uint32_t siq_mode)
 {
-	(void)raw_smc_send(TSP_REE_SIQ, mode, 0, false);
+	int ret = raw_smc_send(TSP_REE_SIQ, mode, 0, false);
+	if (ret == TSP_CRASH) {
+		tloge("TEEOS has crashed!\n");
+		g_sys_crash = true;
+		cmd_monitor_ta_crash(TYPE_CRASH_TEE, NULL, 0);
+	}
+
 	if (siq_mode == SIQ_DUMP_TIMEOUT) {
 		tz_log_write();
 	} else if (siq_mode == SIQ_DUMP_SHELL) {
@@ -990,18 +894,23 @@ static uint32_t get_undo_siq_index(void)
 	return MAX_SIQ_NUM;
 }
 
+#define RUN_SIQ_THREAD 1
+#define STOP_SIQ_THREAD 2
 static int siq_thread_fn(void *arg)
 {
 	int ret;
 	uint32_t i;
+	(void)arg;
 
-	while (1) {
-		ret = wait_event_interruptible(siq_th_wait,
+	while (true) {
+		ret = (int)wait_event_interruptible(siq_th_wait,
 			atomic_read(&g_siq_th_run));
-		if (ret) {
+		if (ret != 0) {
 			tloge("wait event interruptible failed!\n");
 			return -EINTR;
 		}
+		if (atomic_read(&g_siq_th_run) == STOP_SIQ_THREAD)
+			return 0;
 
 		mutex_lock(&g_siq_lock);
 		do {
@@ -1010,7 +919,7 @@ static int siq_thread_fn(void *arg)
 				break;
 			siq_dump((phys_addr_t)(1), g_siq_queue[i]);
 			g_siq_queue[i] = 0;
-		} while (1);
+		} while (true);
 		atomic_set(&g_siq_th_run, 0);
 		mutex_unlock(&g_siq_lock);
 	}
@@ -1024,21 +933,52 @@ static int siq_thread_fn(void *arg)
 
 static void upload_audit_event(unsigned int eventindex)
 {
+#ifdef CONFIG_HW_KERNEL_STP
+	struct stp_item item;
+	int ret;
+	char att_info[MAX_UPLOAD_INFO_LEN + 1] = {0};
+
+	att_info[0] = (unsigned char)(eventindex >> INFO_HIGH_OFFSET);
+	att_info[1] = (unsigned char)(eventindex >> INFO_MID_OFFSET);
+	att_info[2] = (unsigned char)(eventindex >> INFO_LOW_OFFSET);
+	att_info[3] = (unsigned char)eventindex;
+	att_info[MAX_UPLOAD_INFO_LEN] = '\0';
+	item.id = item_info[ITRUSTEE].id; /* 0x00000185 */
+	item.status = STP_RISK;
+	item.credible = STP_REFERENCE;
+	item.version = 0;
+	ret = strcpy_s(item.name, STP_ITEM_NAME_LEN, STP_NAME_ITRUSTEE);
+	if (ret) {
+		tloge("strncpy failed %x\n", ret);
+		return;
+	}
+	tlogd("stp get size %lx succ\n", sizeof(item_info[ITRUSTEE].name));
+	ret = kernel_stp_upload(item, att_info);
+	if (ret)
+		tloge("stp %x event upload failed\n", eventindex);
+	else
+		tloge("stp %x event upload succ\n", eventindex);
+#else
 	(void)eventindex;
+#endif
 }
 #endif
 
-static void cmd_result_check(struct tc_ns_smc_cmd *cmd)
+static void cmd_result_check(const struct tc_ns_smc_cmd *cmd, int cmd_index)
 {
-	if (cmd->ret_val == TEEC_PENDING || cmd->ret_val == TEEC_PENDING2)
+	if (cmd->ret_val == (int)TEEC_PENDING || cmd->ret_val == (int)TEEC_PENDING2)
 		tlogd("wakeup command %u\n", cmd->event_nr);
 
-	if (cmd->ret_val == TEE_ERROR_TAGET_DEAD) {
-		tloge("error smc call: ret = %x and cmd.err_origin=%x\n",
-			cmd->ret_val, cmd->err_origin);
-		cmd_monitor_ta_crash(TYPE_CRASH_TA);
+	if (cmd->ret_val == (int)TEE_ERROR_TAGET_DEAD) {
+		bool ta_killed = g_cmd_data->in[cmd_index].cmd_id == GLOBAL_CMD_ID_KILL_TASK;
+		tloge("error smc call: ret = %x and cmd.err_origin=%x, [ta is %s]\n",
+			cmd->ret_val, cmd->err_origin, (ta_killed == true) ? "killed" : "crash");
+		cmd_monitor_ta_crash((ta_killed == true) ? TYPE_KILLED_TA : TYPE_CRASH_TA,
+			cmd->uuid, sizeof(struct tc_uuid));
 		ta_crash_report_log();
-	} else if (cmd->ret_val == TEE_ERROR_AUDIT_FAIL) {
+	} else if (cmd->ret_val == (int)TEEC_ERROR_TUI_NOT_AVAILABLE) {
+		do_ns_tui_release();
+	} else if (cmd->ret_val == (int)TEE_ERROR_AUDIT_FAIL) {
 		tloge("error smc call: ret = %x and err-origin=%x\n",
 			cmd->ret_val, cmd->err_origin);
 #ifdef CONFIG_TEE_AUDIT
@@ -1055,13 +995,13 @@ static void set_shadow_smc_param(struct smc_in_params *in_params,
 	if (out_params->exit_reason == SMC_EXIT_PREEMPTED) {
 		in_params->x0 = TSP_REQUEST;
 		in_params->x1 = SMC_OPS_SCHEDTO;
-		in_params->x2 = current->pid;
+		in_params->x2 = (unsigned long)current->pid;
 		in_params->x3 = out_params->ta;
 		in_params->x4 = out_params->target;
 	} else if (out_params->exit_reason == SMC_EXIT_NORMAL) {
 		in_params->x0 = TSP_REQUEST;
 		in_params->x1 = SMC_OPS_SCHEDTO;
-		in_params->x2 = current->pid;
+		in_params->x2 = (unsigned long)current->pid;
 		in_params->x3 = 0;
 		in_params->x4 = 0;
 		if (*n_idled > IDLED_COUNT) {
@@ -1071,100 +1011,20 @@ static void set_shadow_smc_param(struct smc_in_params *in_params,
 	}
 }
 
-#ifndef CONFIG_ARM
 static void shadow_wo_pm(const void *arg, struct smc_out_params *out_params,
 	int *n_idled)
 {
 	struct smc_in_params in_params = {
-		TSP_REQUEST, SMC_OPS_START_SHADOW, current->pid, 0, *(u64 *)arg
+		TSP_REQUEST, SMC_OPS_START_SHADOW, current->pid, 0, *(unsigned long *)arg
 	};
 
 	set_shadow_smc_param(&in_params, out_params, n_idled);
-	isb();
-	wmb();
 	tlogd("%s: [cpu %d] x0=%lx x1=%lx x2=%lx x3=%lx x4=%lx\n",
 		__func__, raw_smp_processor_id(), in_params.x0, in_params.x1,
 		in_params.x2, in_params.x3, in_params.x4);
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	if (g_sys_crash) {
-		out_params->ret = TSP_CRASH;
-		return;
-	}
-#endif
-	do {
-		asm volatile(
-			"mov x0, %[fid]\n"
-			"mov x1, %[a1]\n"
-			"mov x2, %[a2]\n"
-			"mov x3, %[a3]\n"
-			"mov x4, %[a4]\n"
-			"smc #0\n"
-			"str x0, [%[re0]]\n"
-			"str x1, [%[re1]]\n"
-			"str x2, [%[re2]]\n"
-			"str x3, [%[re3]]\n" :
-			[fid] "+r"(in_params.x0), [a1] "+r"(in_params.x1),
-			[a2] "+r"(in_params.x2), [a3] "+r"(in_params.x3),
-			[a4] "+r"(in_params.x4) :
-			[re0] "r"(&out_params->ret),
-			[re1] "r"(&out_params->exit_reason),
-			[re2] "r"(&out_params->ta),
-			[re3] "r"(&out_params->target) :
-			"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-			"x8", "x9", "x10", "x11", "x12", "x13",
-			"x14", "x15", "x16", "x17");
-	} while (0);
 
-	isb();
-	wmb();
+	smc_req(&in_params, out_params, 0);
 }
-#else
-static void shadow_wo_pm(const void *arg, struct smc_out_params *out_params,
-	int *n_idled)
-{
-	struct smc_in_params in_params = {
-		TSP_REQUEST, SMC_OPS_START_SHADOW, current->pid, 0, *(u32 *)arg
-	};
-
-	set_shadow_smc_param(&in_params, out_params, n_idled);
-	isb();
-	wmb();
-	tlogd("%s: [cpu %d] x0=%lx x1=%lx x2=%lx x3=%lx x4=%lx\n",
-		__func__, raw_smp_processor_id(), in_params.x0, in_params.x1,
-		in_params.x2, in_params.x3, in_params.x4);
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	if (g_sys_crash) {
-		out_params->ret = TSP_CRASH;
-		return;
-	}
-#endif
-	do {
-		asm volatile(
-			"mov r0, %[fid]\n"
-			"mov r1, %[a1]\n"
-			"mov r2, %[a2]\n"
-			"mov r3, %[a3]\n"
-			"mov r4, %[a4]\n"
-			".arch_extension sec\n"
-			"smc #0\n"
-			"str r0, [%[re0]]\n"
-			"str r1, [%[re1]]\n"
-			"str r2, [%[re2]]\n"
-			"str r3, [%[re3]]\n" :
-			[fid] "+r"(in_params.x0), [a1] "+r"(in_params.x1),
-			[a2] "+r"(in_params.x2), [a3] "+r"(in_params.x3),
-			[a4] "+r"(in_params.x4) :
-			[re0] "r"(&out_params->ret),
-			[re1] "r"(&out_params->exit_reason),
-			[re2] "r"(&out_params->ta),
-			[re3] "r"(&out_params->target) :
-			"r0", "r1", "r2", "r3");
-	} while (0);
-
-	isb();
-	wmb();
-}
-#endif
 
 static void set_preempted_counter(int *n_preempted, int *n_idled,
 	struct pending_entry *pe)
@@ -1191,12 +1051,17 @@ static int proc_shadow_thread_normal_exit(struct pending_entry *pe,
 	long long timeout;
 	int rc;
 
+	if (power_down_cc() != 0) {
+		tloge("power down cc failed\n");
+		*ret_val = -1;
+		return CLEAN_WITHOUT_PM;
+	}
 	*n_preempted = 0;
 
 	timeout = HZ * (long)(HZ_COUNT + ((uint8_t)current->pid & LOW_BYTE));
-	rc = wait_event_freezable_timeout(pe->wq,
+	rc = (int)wait_event_freezable_timeout(pe->wq,
 		atomic_read(&pe->run), (long)timeout);
-	if (!rc)
+	if (rc == 0)
 		(*n_idled)++;
 	if (atomic_read(&pe->run) == SHADOW_EXIT_RUN) {
 		tlogd("shadow thread work quit, be killed\n");
@@ -1215,15 +1080,17 @@ static bool check_shadow_crash(uint64_t crash_reason, int *ret_val)
 		return false;
 
 	tloge("TEEOS shadow has crashed!\n");
+	if (power_down_cc() != 0)
+		tloge("power down cc failed\n");
 
-	g_sys_crash = 1;
-	cmd_monitor_ta_crash(TYPE_CRASH_TEE);
+	g_sys_crash = true;
+	cmd_monitor_ta_crash(TYPE_CRASH_TEE, NULL, 0);
 	report_log_system_error();
 	*ret_val = -1;
 	return true;
 }
 
-static void show_other_exit_reason(struct smc_out_params *params)
+static void show_other_exit_reason(const struct smc_out_params *params)
 {
 	if (params->exit_reason == SMC_EXIT_SHADOW) {
 		tlogd("probe shadow thread non exit, just quit\n");
@@ -1251,11 +1118,15 @@ static int shadow_thread_fn(void *arg)
 	isb();
 	wmb();
 
+retry:
+	if (power_on_cc() != 0) {
+		ret = -EINVAL;
+		tloge("power on cc failed\n");
+		goto clean_wo_pm;
+	}
+
 retry_wo_pm:
 	shadow_wo_pm(arg, &params, &n_idled);
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	fix_params_offset(&params);
-#endif
 	if (check_shadow_crash(params.ret, &ret))
 		goto clean_wo_pm;
 
@@ -1269,12 +1140,16 @@ retry_wo_pm:
 		} else if (ret == RETRY_WITH_PM) {
 			if (match_ta_affinity(pe))
 				tlogd("set shadow pid %d\n", pe->task->pid);
-			goto retry_wo_pm;
+			goto retry;
 		}
 	} else {
 		show_other_exit_reason(&params);
 	}
 
+	if (power_down_cc() != 0) {
+		tloge("power down cc failed\n");
+		ret = -1;
+	}
 clean_wo_pm:
 	kfree(arg);
 	release_pending_entry(pe);
@@ -1306,6 +1181,16 @@ static void shadow_work_func(struct kthread_work *work)
 	tlogd("%s: create shadow thread %lu for target %llx\n",
 		__func__, g_shadow_thread_id, *target_arg);
 	tz_kthread_bind_mask(shadow_thread);
+#if CONFIG_CPU_AFF_NR
+	struct cpumask shadow_mask;
+	unsigned int i;
+
+	cpumask_clear(&shadow_mask);
+	for (i = 0; i < CONFIG_CPU_AFF_NR; i++)
+		cpumask_set_cpu(i, &shadow_mask);
+
+	koadpt_kthread_bind_mask(shadow_thread, &shadow_mask);
+#endif
 	wake_up_process(shadow_thread);
 }
 
@@ -1317,6 +1202,7 @@ static int proc_smc_wakeup_ca(pid_t ca, int which)
 		struct pending_entry *pe = find_pending_entry(ca);
 
 		if (!pe) {
+			(void)raw_smc_send(TSP_REE_SIQ, (phys_addr_t)ca, 0, false);
 			tlogd("invalid ca pid=%d for pending entry\n",
 				(int)ca);
 			return -1;
@@ -1346,6 +1232,7 @@ int smc_wakeup_broadcast(void)
 
 int smc_wakeup_ca(pid_t ca)
 {
+	tee_trace_add_event(SPI_WAKEUP, (uint64_t)ca);
 	return proc_smc_wakeup_ca(ca, 1);
 }
 
@@ -1357,9 +1244,20 @@ int smc_shadow_exit(pid_t ca)
 void fiq_shadow_work_func(uint64_t target)
 {
 	struct smc_cmd_ret secret = { SMC_EXIT_MAX, 0, target };
+	tee_trace_add_event(INTERRUPT_HANDLE_SPI_REE_SCHEDULED, target);
+	secs_suspend_status(target);
+	if (power_on_cc() != 0) {
+		tloge("power on cc failed\n");
+		return;
+	}
 
+	livepatch_down_read_sem();
 	smp_smc_send(TSP_REQUEST, (unsigned long)SMC_OPS_START_FIQSHD,
 		(unsigned long)(uint32_t)(current->pid), &secret, false);
+	livepatch_up_read_sem();
+
+	if (power_down_cc() != 0)
+		tloge("power down cc failed\n");
 
 	return;
 }
@@ -1416,9 +1314,9 @@ static int smc_ops_normal(struct cmd_reuse_info *info,
 		return 0;
 
 	if (info->cmd_usage == RESEND) {
-		if (reuse_smc_in_entry(info->cmd_index)) {
+		if (reuse_smc_in_entry((uint32_t)info->cmd_index) != 0) {
 			tloge("reuse smc entry failed\n");
-			release_smc_entry(info->cmd_index);
+			release_smc_entry((uint32_t)info->cmd_index);
 			return -ENOMEM;
 		}
 	} else {
@@ -1447,14 +1345,14 @@ static int smc_ops_normal(struct cmd_reuse_info *info,
 static int smp_smc_send_cmd_done(int cmd_index, struct tc_ns_smc_cmd *cmd,
 	struct tc_ns_smc_cmd *in)
 {
-	cmd_result_check(cmd);
+	cmd_result_check(cmd, cmd_index);
 	switch (cmd->ret_val) {
 	case TEEC_PENDING2: {
 		unsigned int agent_id = cmd->agent_id;
 		/* If the agent does not exist post
 		 * the answer right back to the TEE
 		 */
-		if (agent_process_work(cmd, agent_id))
+		if (agent_process_work(cmd, agent_id) != 0)
 			tloge("agent process work failed\n");
 		return PENDING2_RETRY;
 	}
@@ -1462,7 +1360,7 @@ static int smp_smc_send_cmd_done(int cmd_index, struct tc_ns_smc_cmd *cmd,
 	case TEEC_PENDING:
 	/* just copy out, and let out to proceed */
 	default:
-		if (memcpy_s(in, sizeof(*in), cmd, sizeof(*cmd))) {
+		if (memcpy_s(in, sizeof(*in), cmd, sizeof(*cmd)) != EOK) {
 			tloge("memcpy failed,%s line:%d", __func__, __LINE__);
 			cmd->ret_val = -1;
 		}
@@ -1513,12 +1411,12 @@ static void print_crash_msg(union crash_inf *crash_info)
 		char syms[SYM_NAME_LEN_MAX] = {0};
 
 		if (memcpy_s(syms, SYM_NAME_LEN_MAX,
-			crash_info->crash_msg.sym_name, SYM_NAME_LEN_1))
+			crash_info->crash_msg.sym_name, SYM_NAME_LEN_1) != EOK)
 			tloge("memcpy sym name failed!\n");
 
 		if (memcpy_s(syms + SYM_NAME_LEN_1,
 			SYM_NAME_LEN_MAX - SYM_NAME_LEN_1,
-			crash_info->crash_msg.sym_name_append, SYM_NAME_LEN_2))
+			crash_info->crash_msg.sym_name_append, SYM_NAME_LEN_2) != EOK)
 			tloge("memcpy sym_name_append failed!\n");
 		tloge("====crash app:%s user_sym:%s + <0x%x/0x%x>\n",
 		      crash_app_name, syms, off, crash_info->crash_msg.size);
@@ -1527,16 +1425,32 @@ static void print_crash_msg(union crash_inf *crash_info)
 	}
 }
 
+void clr_system_crash_flag(void)
+{
+	g_sys_crash = false;
+}
+
 static int smp_smc_send_process(struct tc_ns_smc_cmd *cmd, u64 ops,
 	struct smc_cmd_ret *cmd_ret, int cmd_index)
 {
 	int ret;
-
 	tlogd("smc send start cmd_id = %u, ca = %u\n",
 		cmd->cmd_id, cmd->ca_pid);
 
+	if (power_on_cc() != 0) {
+		tloge("power on cc failed\n");
+		cmd->ret_val = -1;
+		return -1;
+	}
+
 	ret = smp_smc_send(TSP_REQUEST, (unsigned long)ops,
 		(unsigned long)(uint32_t)(current->pid), cmd_ret, ops != SMC_OPS_ABORT_TASK);
+
+	if (power_down_cc() != 0) {
+		tloge("power down cc failed\n");
+		cmd->ret_val = -1;
+		return -1;
+	}
 
 	tlogd("smc send ret = %x, cmd ret.exit=%ld, cmd index=%d\n",
 		ret, (long)cmd_ret->exit, cmd_index);
@@ -1551,12 +1465,14 @@ static int smp_smc_send_process(struct tc_ns_smc_cmd *cmd, u64 ops,
 		tloge("TEEOS has crashed!\n");
 		print_crash_msg(&crash_info);
 
-		g_sys_crash = 1;
-		cmd_monitor_ta_crash(TYPE_CRASH_TEE);
+		g_sys_crash = true;
+		cmd_monitor_ta_crash(TYPE_CRASH_TEE, NULL, 0);
 
+		tee_wake_up_reboot();
+#ifndef CONFIG_TEE_REBOOT
 		report_log_system_error();
-
-		cmd->ret_val = -1;
+#endif
+		cmd->ret_val = TEE_ERROR_IS_DEAD;
 		return -1;
 	}
 
@@ -1576,11 +1492,11 @@ static int init_for_smc_send(struct tc_ns_smc_cmd *in,
 		return -ENOMEM;
 	}
 
-	in->ca_pid = current->pid;
+	in->ca_pid = (unsigned int)current->pid;
 	if (reuse)
 		return 0;
 
-	if (memcpy_s(cmd, sizeof(*cmd), in, sizeof(*in))) {
+	if (memcpy_s(cmd, sizeof(*cmd), in, sizeof(*in)) != EOK) {
 		tloge("memcpy in cmd failed\n");
 		release_pending_entry(*pe);
 		return -EFAULT;
@@ -1591,6 +1507,7 @@ static int init_for_smc_send(struct tc_ns_smc_cmd *in,
 
 static bool is_ca_killed(int cmd_index)
 {
+	(void)cmd_index;
 	/* if CA has not been killed */
 	if (sigkill_pending(current)) {
 		/* signal pending, send abort cmd */
@@ -1604,8 +1521,8 @@ static void clean_smc_resrc(struct cmd_reuse_info info,
 	const struct tc_ns_smc_cmd *cmd,
 	struct pending_entry *pe)
 {
-	if (info.cmd_usage != CLEAR && cmd->ret_val != TEEC_PENDING)
-		release_smc_entry(info.cmd_index);
+	if (info.cmd_usage != CLEAR && cmd->ret_val != (int)TEEC_PENDING)
+		release_smc_entry((uint32_t)info.cmd_index);
 
 	release_pending_entry(pe);
 }
@@ -1613,7 +1530,7 @@ static void clean_smc_resrc(struct cmd_reuse_info info,
 static int set_abort_cmd(int index)
 {
 	acquire_smc_buf_lock(&g_cmd_data->smc_lock);
-	if (!test_bit(index, (unsigned long *)g_cmd_data->doing_bitmap)) {
+	if (test_bit(index, (unsigned long *)g_cmd_data->doing_bitmap) == 0) {
 		release_smc_buf_lock(&g_cmd_data->smc_lock);
 		tloge("can't abort an unprocess cmd\n");
 		return -1;
@@ -1627,16 +1544,17 @@ static int set_abort_cmd(int index)
 	g_cmd_data->in[index].login_data_phy = 0;
 	g_cmd_data->in[index].login_data_h_addr = 0;
 
-	clear_bit(index, (unsigned long *)g_cmd_data->doing_bitmap);
+	clear_bit((unsigned int)index, (unsigned long *)g_cmd_data->doing_bitmap);
 	release_smc_buf_lock(&g_cmd_data->smc_lock);
 	tloge("set abort cmd success\n");
 
 	return 0;
 }
 
-static enum smc_ops_exit process_abort_cmd(int index, struct pending_entry *pe)
+static enum smc_ops_exit process_abort_cmd(int index, const struct pending_entry *pe)
 {
-	if (!set_abort_cmd(index))
+	(void)pe;
+	if (set_abort_cmd(index) == 0)
 		return SMC_OPS_ABORT_TASK;
 
 	return SMC_OPS_SCHEDTO;
@@ -1664,7 +1582,7 @@ static void init_timeout_step(uint32_t timeout, struct timeout_step_t *step)
 
 		if (timeout > RESLEEP_TIMEOUT * MSEC_PER_SEC)
 			timeout = RESLEEP_TIMEOUT * MSEC_PER_SEC;
-		timeout_in_jiffies = msecs_to_jiffies(timeout);
+		timeout_in_jiffies = (uint32_t)msecs_to_jiffies(timeout);
 
 		/*
 		 * [timeout_in_jiffies-1, timeout_in_jiffies+2] jiffies
@@ -1700,57 +1618,63 @@ enum smc_status_t {
 	ST_RETRY,
 };
 
+static long wait_event_internal(struct pending_entry *pe, struct timeout_step_t *step)
+{
+	if (!current->mm) {
+		/*
+		 * smc svc thread need freezable, to solve the problem:
+		 * When the system is in hibernation, the TEE image needs
+		 * to be backed up in some scenarios, all smc cmds are not allowed to enter tee
+		 */
+		return wait_event_freezable_timeout(pe->wq, atomic_read(&pe->run),
+				step->steps[step->cur]);
+	} else {
+		return wait_event_timeout(pe->wq, atomic_read(&pe->run),
+				step->steps[step->cur]);
+	}
+}
 static enum pending_t proc_ta_pending(struct pending_entry *pe,
 	struct timeout_step_t *step, uint64_t pending_args, uint32_t cmd_index,
 	u64 *ops)
 {
 	bool kernel_call = false;
 	bool woke_up = false;
-
 	/*
 	 * if ->mm is NULL, it's a kernel thread and a kthread will never
 	 * receive a signal.
 	 */
-	if (!current->mm) {
+	uint32_t timeout = (uint32_t)pending_args;
+	bool timer_no_irq = (pending_args >> 32) == 0 ? false : true;
+	uint32_t cur_timeout;
+	if (step->cur == INVALID_STEP_SIZE)
+		init_timeout_step(timeout, step);
+	if (!current->mm)
 		kernel_call = true;
-		if (wait_event_interruptible(pe->wq, atomic_read(&pe->run)))
-			tloge("kernel CA is interrupted\n");
-	} else {
-		uint32_t timeout = (uint32_t)pending_args;
-		bool timer_no_irq = (pending_args >> 32) == 0 ? false : true;
-		uint32_t cur_timeout;
-
-		if (step->cur == INVALID_STEP_SIZE)
-			init_timeout_step(timeout, step);
 resleep:
-		cur_timeout = jiffies_to_msecs(step->steps[step->cur]);
-
-		if (!wait_event_timeout(pe->wq, atomic_read(&pe->run),
-				step->steps[step->cur])) {
-			if (step->cur < (step->size - 1)) {
-				step->cur++;
-				/*
-				 * As there may no timer irq in TEE, we need a chance to
-				 * run timer's irq handler initiatively by SMC_OPS_SCHEDTO.
-				 */
-				if (timer_no_irq) {
-					*ops = SMC_OPS_SCHEDTO;
-					return PD_TIMEOUT;
-				} else {
-					goto resleep;
-				}
+	cur_timeout = jiffies_to_msecs(step->steps[step->cur]);
+	tee_trace_add_event(SMC_SLEEP, 0);
+	if (wait_event_internal(pe, step) == 0) {
+		if (step->cur < (step->size - 1)) {
+			step->cur++;
+			/*
+			 * As there may no timer irq in TEE, we need a chance to
+			 * run timer's irq handler initiatively by SMC_OPS_SCHEDTO.
+			 */
+			if (timer_no_irq) {
+				*ops = SMC_OPS_SCHEDTO;
+				return PD_TIMEOUT;
+			} else {
+				goto resleep;
 			}
-
-			if (is_ca_killed(cmd_index)) {
-				*ops = (u64)process_abort_cmd(cmd_index, pe);
-				return PD_WAKEUP;
-			}
-		} else {
-			woke_up = true;
-			tlogd("%s woke up\n", __func__);
 		}
+		if (is_ca_killed(cmd_index)) {
+			*ops = (u64)process_abort_cmd(cmd_index, pe);
+			return PD_WAKEUP;
+		}
+	} else {
+		woke_up = true;
+		tlogd("%s woke up\n", __func__);
 	}
-
 	atomic_set(&pe->run, 0);
 	if (!is_cmd_working_done(cmd_index)) {
 		*ops = SMC_OPS_SCHEDTO;
@@ -1760,7 +1684,6 @@ resleep:
 		show_cmd_bitmap();
 	}
 	tlogd("cmd is done\n");
-
 	return PD_DONE;
 }
 
@@ -1786,7 +1709,7 @@ static enum smc_status_t proc_normal_exit(struct pending_entry *pe, u64 *ops,
 	}
 
 	pd_ret = proc_ta_pending(pe, timeout_step,
-		cmd_ret->ta, cmd_index, ops);
+		cmd_ret->ta, (uint32_t)cmd_index, ops);
 	if (pd_ret == PD_DONE)
 		return ST_DONE;
 
@@ -1799,12 +1722,12 @@ static enum smc_status_t handle_cmd_working_done(
 	struct tc_ns_smc_cmd *cmd, u64 *ops, struct tc_ns_smc_cmd *in,
 	struct cmd_reuse_info *info)
 {
-	if (copy_smc_out_entry(info->cmd_index, cmd, &info->cmd_usage)) {
+	if (copy_smc_out_entry((uint32_t)info->cmd_index, cmd, &info->cmd_usage) != 0) {
 		cmd->ret_val = TEEC_ERROR_GENERIC;
 		return ST_DONE;
 	}
 
-	if (smp_smc_send_cmd_done(info->cmd_index, cmd, in)) {
+	if (smp_smc_send_cmd_done(info->cmd_index, cmd, in) != 0) {
 		*ops = SMC_OPS_NORMAL; /* cmd will be reused */
 		return ST_RETRY;
 	}
@@ -1820,22 +1743,29 @@ static int smp_smc_send_func(struct tc_ns_smc_cmd *in, bool reuse)
 	struct pending_entry *pe = NULL;
 	u64 ops;
 	struct timeout_step_t timeout_step =
-		{ {0, 0, 0, 0}, TO_STEP_SIZE, -1, false };
+		{{0, 0, 0, 0}, TO_STEP_SIZE, -1, false};
 
-	if (init_for_smc_send(in, &pe, &cmd, reuse))
+	if (init_for_smc_send(in, &pe, &cmd, reuse) != 0)
 		return TEEC_ERROR_GENERIC;
 
 	if (reuse) {
-		info.saved_index = in->event_nr;
-		info.cmd_index = in->event_nr;
+		info.saved_index = (int)in->event_nr;
+		info.cmd_index = (int)in->event_nr;
 		info.cmd_usage = RESEND;
 	}
 	ops = SMC_OPS_NORMAL;
 
 retry:
+#ifdef CONFIG_TEE_REBOOT
+	if (is_tee_rebooting() && in->cmd_id == GLOBAL_CMD_ID_SET_SERVE_CMD) {
+		release_pending_entry(pe);
+		return TEE_ERROR_IS_DEAD;
+	}
+#endif
+
 	set_timeout_step(&timeout_step);
 
-	if (smc_ops_normal(&info, &cmd, ops)) {
+	if (smc_ops_normal(&info, &cmd, ops) != 0) {
 		release_pending_entry(pe);
 		return TEEC_ERROR_GENERIC;
 	}
@@ -1843,7 +1773,7 @@ retry:
 	if (smp_smc_send_process(&cmd, ops, &cmd_ret, info.cmd_index) == -1)
 		goto clean;
 
-	if (!is_cmd_working_done(info.cmd_index)) {
+	if (!is_cmd_working_done((uint32_t)info.cmd_index)) {
 		if (cmd_ret.exit == SMC_EXIT_NORMAL) {
 			if (proc_normal_exit(pe, &ops, &timeout_step, &cmd_ret,
 				info.cmd_index) == ST_RETRY)
@@ -1867,6 +1797,8 @@ clean:
 
 static int smc_svc_thread_fn(void *arg)
 {
+	(void)arg;
+	set_freezable();
 	while (!kthread_should_stop()) {
 		struct tc_ns_smc_cmd smc_cmd = { {0}, 0 };
 		int ret;
@@ -1880,7 +1812,7 @@ static int smc_svc_thread_fn(void *arg)
 	return 0;
 }
 
-bool is_tee_hungtask(struct task_struct *task)
+bool __attribute__((weak)) is_tee_hungtask(struct task_struct *task)
 {
 	(void)task;
 
@@ -1902,7 +1834,7 @@ void wakeup_tc_siq(uint32_t siq_mode)
 		return;
 	}
 	g_siq_queue[i] = siq_mode;
-	atomic_set(&g_siq_th_run, 1);
+	atomic_set(&g_siq_th_run, RUN_SIQ_THREAD);
 	mutex_unlock(&g_siq_lock);
 	wake_up_interruptible(&siq_th_wait);
 }
@@ -1918,8 +1850,9 @@ static int proc_tc_ns_smc(struct tc_ns_smc_cmd *cmd, bool reuse)
 
 	if (g_sys_crash) {
 		tloge("ERROR: sys crash happened!!!\n");
-		return TEEC_ERROR_GENERIC;
+		return TEE_ERROR_IS_DEAD;
 	}
+
 	if (!cmd) {
 		tloge("invalid cmd\n");
 		return TEEC_ERROR_GENERIC;
@@ -1946,7 +1879,12 @@ int tc_ns_smc_with_no_nr(struct tc_ns_smc_cmd *cmd)
 
 static void smc_work_no_wait(uint32_t type)
 {
-	(void)raw_smc_send(TSP_REQUEST, g_cmd_phys, type, true);
+	(void) raw_smc_send(TSP_REQUEST, g_cmd_phys, type, true);
+}
+
+void send_smc_reset_cmd_buffer(void)
+{
+	send_smc_cmd_rebooting(TSP_REQUEST, g_cmd_phys, TC_NS_CMD_TYPE_SECURE_CONFIG, NULL);
 }
 
 static void smc_work_set_cmd_buffer(struct work_struct *work)
@@ -1955,9 +1893,11 @@ static void smc_work_set_cmd_buffer(struct work_struct *work)
 	smc_work_no_wait(TC_NS_CMD_TYPE_SECURE_CONFIG);
 }
 
-static void smc_set_cmd_buffer(void)
+void smc_set_cmd_buffer(void)
 {
 	struct work_struct work;
+	if (g_reserved_cmd_buffer)
+		return;
 
 	INIT_WORK_ONSTACK(&work, smc_work_set_cmd_buffer);
 	/* Run work on CPU 0 */
@@ -1968,19 +1908,19 @@ static void smc_set_cmd_buffer(void)
 
 static int alloc_cmd_buffer(void)
 {
-#ifdef CONFIG_BIG_SESSION
-	/* we should map at least 64 pages for 1000 sessions, 2^6 > 40 */
-	g_cmd_data = (struct tc_ns_smc_queue *)(uintptr_t)__get_free_pages(
-		GFP_KERNEL | __GFP_ZERO, 6);
-#else
-	g_cmd_data = (struct tc_ns_smc_queue *)(uintptr_t)__get_free_page(
-		GFP_KERNEL | __GFP_ZERO);
-#endif
+	if (g_reserved_cmd_buffer) {
+		tlogi("use reserved cmd buffer");
+		g_cmd_data = (struct tc_ns_smc_queue *)get_reserved_cmd_vaddr_of(g_cmd_phys, (uint64_t)g_cmd_size);
+		if (!g_cmd_data)
+			return -ENOMEM;
+
+		return 0;
+	}
+	g_cmd_data = (struct tc_ns_smc_queue *)(uintptr_t)get_cmd_mem_vaddr();
 	if (!g_cmd_data)
 		return -ENOMEM;
 
-	g_cmd_phys = virt_to_phys(g_cmd_data);
-
+	g_cmd_phys = get_cmd_mem_paddr((uint64_t)(uintptr_t)g_cmd_data);
 	return 0;
 }
 
@@ -2024,15 +1964,21 @@ static int parse_params_from_tee(void)
 	int ret;
 	void *buffer = NULL;
 
+	/* enable uefi and reserved buffer, not check teeos compat level */
+	if (g_reserved_cmd_buffer) {
+		tlogw("uefi mode, not check teeos compat level\n");
+		return 0;
+	}
+
 	buffer = (void *)(g_cmd_data->in);
 	ret = check_teeos_compat_level((uint32_t *)buffer,
 		COMPAT_LEVEL_BUF_LEN);
-	if (ret) {
+	if (ret != 0) {
 		tloge("check teeos compatibility failed\n");
 		return ret;
 	}
 	if (memset_s(buffer, sizeof(g_cmd_data->in),
-		0, sizeof(g_cmd_data->in))) {
+		0, sizeof(g_cmd_data->in)) != EOK) {
 		tloge("Clean the command buffer failed\n");
 		ret = -EFAULT;
 		return ret;
@@ -2048,14 +1994,14 @@ int smc_context_init(const struct device *class_dev)
 		return -ENOMEM;
 
 	ret = alloc_cmd_buffer();
-	if (ret)
+	if (ret != 0)
 		return ret;
 
 	/* Send the allocated buffer to TrustedCore for init */
 	smc_set_cmd_buffer();
 
 	ret = parse_params_from_tee();
-	if (ret) {
+	if (ret != 0) {
 		tloge("parse params from tee failed\n");
 		goto free_mem;
 	}
@@ -2069,7 +2015,7 @@ int smc_context_init(const struct device *class_dev)
 	}
 
 	ret = init_smc_related_rsrc(class_dev);
-	if (ret)
+	if (ret != 0)
 		goto free_siq_worker;
 
 	return 0;
@@ -2078,7 +2024,7 @@ free_siq_worker:
 	kthread_stop(g_siq_thread);
 	g_siq_thread = NULL;
 free_mem:
-	free_page((unsigned long)(uintptr_t)g_cmd_data);
+	free_cmd_mem((uint64_t)(uintptr_t)g_cmd_data);
 	g_cmd_data = NULL;
 	return ret;
 }
@@ -2090,7 +2036,7 @@ int init_smc_svc_thread(void)
 	if (unlikely(IS_ERR_OR_NULL(g_smc_svc_thread))) {
 		tloge("couldn't create smc_svc_thread %ld\n",
 			PTR_ERR(g_smc_svc_thread));
-		return PTR_ERR(g_smc_svc_thread);
+		return (int)PTR_ERR(g_smc_svc_thread);
 	}
 	tz_kthread_bind_mask(g_smc_svc_thread);
 	wake_up_process(g_smc_svc_thread);
@@ -2100,14 +2046,84 @@ int init_smc_svc_thread(void)
 int teeos_log_exception_archive(unsigned int eventid,
 	const char *exceptioninfo)
 {
+#ifdef CONFIG_TEE_LOG_EXCEPTION
+	int ret;
+	struct imonitor_eventobj *teeos_obj = NULL;
+
+	teeos_obj = imonitor_create_eventobj(eventid);
+	if (exceptioninfo) {
+		tlogi("upload exception info: [%s]\n", exceptioninfo);
+		ret = imonitor_set_param(teeos_obj, 0, (long)(uintptr_t)exceptioninfo);
+	} else {
+		ret = imonitor_set_param(teeos_obj, 0, (long)(uintptr_t)"teeos something crash");
+	}
+	if (ret) {
+		tloge("imonitor_set_param failed\n");
+		imonitor_destroy_eventobj(teeos_obj);
+		return ret;
+	}
+	ret = imonitor_add_dynamic_path(teeos_obj, "/data/vendor/log/hisi_logs/tee");
+	if (ret) {
+		tloge("add path failed\n");
+		imonitor_destroy_eventobj(teeos_obj);
+		return ret;
+	}
+	ret = imonitor_add_dynamic_path(teeos_obj, "/data/log/tee");
+	if (ret) {
+		tloge("add path failed\n");
+		imonitor_destroy_eventobj(teeos_obj);
+		return ret;
+	}
+	ret = imonitor_send_event(teeos_obj);
+	imonitor_destroy_eventobj(teeos_obj);
+	return ret;
+#else
+	(void)eventid;
+	(void)exceptioninfo;
 	return 0;
+#endif
 }
 
-void smc_free_data(void)
+void svc_thread_release(void)
 {
-	free_page((unsigned long)(uintptr_t)g_cmd_data);
 	if (!IS_ERR_OR_NULL(g_smc_svc_thread)) {
 		kthread_stop(g_smc_svc_thread);
 		g_smc_svc_thread = NULL;
 	}
+}
+
+void free_smc_data(void)
+{
+	struct pending_entry *pe = NULL, *temp = NULL;
+	if (g_reserved_cmd_buffer)
+		iounmap((void __iomem *)g_cmd_data);
+	else
+		free_cmd_mem((uint64_t)(uintptr_t)g_cmd_data);
+	smc_wakeup_broadcast();
+	svc_thread_release();
+	if (!IS_ERR_OR_NULL(g_siq_thread)) {
+		atomic_set(&g_siq_th_run, STOP_SIQ_THREAD);
+		wake_up_interruptible(&siq_th_wait);
+		kthread_stop(g_siq_thread);
+		g_siq_thread = NULL;
+	}
+
+#if (KERNEL_VERSION(4, 9, 0) > LINUX_VERSION_CODE)
+	flush_kthread_worker(&g_ipi_helper_worker);
+#else
+	kthread_flush_worker(&g_ipi_helper_worker);
+#endif
+	if (!IS_ERR_OR_NULL(g_ipi_helper_thread)) {
+		kthread_stop(g_ipi_helper_thread);
+		g_ipi_helper_thread = NULL;
+	}
+	free_cmd_monitor();
+
+	spin_lock(&g_pend_lock);
+	list_for_each_entry_safe(pe, temp, &g_pending_head, list) {
+		list_del(&pe->list);
+		put_task_struct(pe->task);
+		kfree(pe);
+	}
+	spin_unlock(&g_pend_lock);
 }

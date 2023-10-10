@@ -3,15 +3,16 @@
  *
  * function for proc open,close session and invoke
  *
- * Copyright (C) 2022 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2020-2022 Huawei Technologies Co., Ltd.
  *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
 #include "tz_pm.h"
@@ -23,6 +24,7 @@
 #include "tc_ns_client.h"
 #include "teek_ns_client.h"
 #include "tc_ns_log.h"
+#include "smc_call.h"
 
 #define S4_ADDR_4G              0xffffffff
 #define RESERVED_SECOS_PHYMEM_BASE                  0x22800000
@@ -46,10 +48,10 @@ static void *tc_vmap(phys_addr_t paddr, size_t size)
 
 	offset = paddr & ~PAGE_MASK;
 	paddr &= PAGE_MASK;
-	pages_count = PAGE_ALIGN(size + offset) / PAGE_SIZE;
+	pages_count = (uint32_t)(PAGE_ALIGN(size + offset) / PAGE_SIZE);
 
 	pages = kzalloc(sizeof(struct page *) * pages_count, GFP_KERNEL);
-	if (pages == NULL)
+	if (ZERO_OR_NULL_PTR((unsigned long)(uintptr_t)pages))
 		return NULL;
 
 	for (i = 0; i < pages_count; i++)
@@ -66,6 +68,7 @@ static void *tc_vmap(phys_addr_t paddr, size_t size)
 static int tc_s4_alloc_crypto_buffer(struct device *dev,
 	 char **kernel_mem_addr)
 {
+	(void)dev;
 	if (RESERVED_SECOS_S4_BASE > S4_ADDR_4G) {
 		tloge("addr is invalid\n");
 		return -EFAULT;
@@ -102,26 +105,14 @@ static void free_resource(const char *kernel_mem_addr)
 	g_s4_buffer_size = 0;
 }
 
-#ifndef CONFIG_ARM
 static uint64_t tc_s4_suspend_or_resume(uint32_t power_op)
 {
 	u64 smc_id = (u64)power_op;
 	u64 smc_ret = 0xffff;
-
-	do {
-		asm volatile (
-			"mov x0, %[fid]\n"
-			"smc #0\n"
-			"str x0, [%[re0]]\n" :
-			[fid] "+r"(smc_id) :
-			[re0] "r"(&smc_ret) :
-			"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-			"x8", "x9", "x10", "x11", "x12", "x13",
-			"x14", "x15", "x16", "x17");
-	} while (0);
-
-	isb();
-	wmb();
+	struct smc_in_params in_param = { smc_id };
+	struct smc_out_params out_param = { smc_ret };
+	smc_req(&in_param, &out_param, 0);
+	smc_ret = out_param.ret;
 	return smc_ret;
 }
 
@@ -136,89 +127,13 @@ static uint64_t tc_s4_crypto_and_copy(uint32_t crypt_op,
 	u64 arg2 = (u64)size;
 	u64 arg3 = (u64)index;
 	u64 smc_ret = 0xffff;
+	struct smc_in_params in_param = { smc_id, arg0, arg1, arg2, arg3 };
+	struct smc_out_params out_param = { smc_ret };
 
-	do {
-		asm volatile (
-			"mov x0, %[fid]\n"
-			"mov x1, %[a1]\n"
-			"mov x2, %[a2]\n"
-			"mov x3, %[a3]\n"
-			"mov x4, %[a4]\n"
-			"smc #0\n"
-			"str x0, [%[re0]]\n" :
-			[fid] "+r"(smc_id),
-			[a1] "+r"(arg0),
-			[a2] "+r"(arg1),
-			[a3] "+r"(arg2),
-			[a4] "+r"(arg3) :
-			[re0] "r"(&smc_ret) :
-			"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-			"x8", "x9", "x10", "x11", "x12", "x13",
-			"x14", "x15", "x16", "x17");
-	} while (0);
-
-	isb();
-	wmb();
+	smc_req(&in_param, &out_param, 0);
+	smc_ret = out_param.ret;
 	return smc_ret;
 }
-#else
-static uint32_t tc_s4_suspend_or_resume(uint32_t power_op)
-{
-	u32 smc_id = power_op;
-	u32 smc_ret = 0xffff;
-
-	do {
-		asm volatile (
-			"mov r0, %[fid]\n"
-			".arch_extension sec\n"
-			"smc #0\n"
-			"str r0, [%[re0]]\n" :
-			[fid] "+r"(smc_id) :
-			[re0] "r"(&smc_ret) :
-			"r0");
-	} while (0);
-
-	isb();
-	wmb();
-	return smc_ret;
-}
-
-static uint32_t tc_s4_crypto_and_copy(uint32_t crypt_op,
-	uint64_t middle_mem_addr,
-	uintptr_t secos_mem,
-	uint32_t size, uint32_t index)
-{
-	u32 smc_id = crypt_op;
-	u32 arg0 = (u32)middle_mem_addr;
-	u32 arg1 = (u32)secos_mem;
-	u32 arg2 = size;
-	u32 arg3 = index;
-	u32 smc_ret = 0xffff;
-
-	do {
-		asm volatile (
-			"mov r0, %[fid]\n"
-			"mov r1, %[a1]\n"
-			"mov r2, %[a2]\n"
-			"mov r3, %[a3]\n"
-			"mov r4, %[a4]\n"
-			".arch_extension sec\n"
-			"smc #0\n"
-			"str r0, [%[re0]]\n" :
-			[fid] "+r"(smc_id),
-			[a1] "+r"(arg0),
-			[a2] "+r"(arg1),
-			[a3] "+r"(arg2),
-			[a4] "+r"(arg3) :
-			[re0] "r"(&smc_ret) :
-			"r0", "r1", "r2", "r3", "r4");
-	} while (0);
-
-	isb();
-	wmb();
-	return smc_ret;
-}
-#endif
 
 static int tc_s4_transfer_data(char *kernel_mem_addr, uint32_t crypt_op)
 {
@@ -262,18 +177,16 @@ static int tc_s4_pm_ops(struct device *dev, uint32_t power_op,
 			uint32_t crypt_op, char *kernel_mem_addr)
 {
 	int ret;
+	(void)dev;
 
 	if (power_op == TSP_S4_SUSPEND)
 		g_s4_kernel_mem_addr = kernel_mem_addr;
 	else
 		kernel_mem_addr = g_s4_kernel_mem_addr;
 
-	isb();
-	wmb();
-
 	/* notify TEEOS to suspend all pm driver */
 	if (power_op == TSP_S4_SUSPEND) {
-		ret = tc_s4_suspend_or_resume(power_op);
+		ret = (int)tc_s4_suspend_or_resume(power_op);
 		if (ret != 0) {
 			tloge("tc s4 suspend failed\n");
 			return ret;
@@ -288,7 +201,7 @@ static int tc_s4_pm_ops(struct device *dev, uint32_t power_op,
 
 	/* notify TEEOS to resume all pm driver */
 	if (power_op == TSP_S4_RESUME) {
-	ret = tc_s4_suspend_or_resume(power_op);
+		ret = (int)tc_s4_suspend_or_resume(power_op);
 		if (ret != 0) {
 			tloge("tc s4 resume failed\n");
 			return ret;

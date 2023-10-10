@@ -30,20 +30,15 @@
 
 typedef const struct cred *(get_task_cred_func)(struct task_struct *);
 typedef void (kthread_bind_mask_func)(struct task_struct *, const struct cpumask *);
-typedef long (sys_chown_func)(const char __user *filename,
-		uid_t user, gid_t group);
-typedef ssize_t (vfs_write_func)(struct file *file, const char __user *buf,
-		size_t count, loff_t *pos);
-typedef ssize_t (vfs_read_func)(struct file *file, char __user *buf,
-		size_t count, loff_t *pos);
-
 typedef struct page *(alloc_pages_func)(gfp_t gfp_mask, unsigned int order);
-
 typedef struct workqueue_attrs *(alloc_workqueue_attrs_func)(gfp_t gfp_mask);
 typedef void (free_workqueue_attrs_func)(struct workqueue_attrs *attrs);
 
 const struct cred *koadpt_get_task_cred(struct task_struct *task)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+	return get_task_cred(task);
+#else
 	static get_task_cred_func *get_task_cred_pt = NULL;
 
 	if (!task)
@@ -58,11 +53,15 @@ const struct cred *koadpt_get_task_cred(struct task_struct *task)
 		}
 	}
 	return get_task_cred_pt(task);
+#endif
 }
 
 void koadpt_kthread_bind_mask(struct task_struct *task,
 	const struct cpumask *mask)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+	(void)set_cpus_allowed_ptr(task, mask);
+#else
 	static kthread_bind_mask_func *kthread_bind_mask_pt = NULL;
 
 	if (!task || !mask)
@@ -77,75 +76,15 @@ void koadpt_kthread_bind_mask(struct task_struct *task,
 		}
 	}
 	kthread_bind_mask_pt(task, mask);
-}
-
-long koadpt_sys_chown(const char __user *filename, uid_t user, gid_t group)
-{
-	static sys_chown_func *sys_chown_pt = NULL;
-
-	if (!filename)
-		return -EINVAL;
-
-	if (!sys_chown_pt) {
-		sys_chown_pt = (sys_chown_func *)
-			(uintptr_t)kallsyms_lookup_name("sys_chown");
-		if (IS_ERR_OR_NULL(sys_chown_pt)) {
-			tloge("fail to find symbol kthread bind mask\n");
-			return -EINVAL;
-		}
-	}
-	return sys_chown_pt(filename, user, group);
-}
-
-ssize_t koadpt_vfs_write(struct file *file, const char __user *buf,
-	size_t count, loff_t *pos)
-{
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(4, 19, 116))
-	static vfs_write_func *vfs_write_pt = NULL;
-
-	if (!file || !buf || !pos)
-		return -EINVAL;
-
-	if (!vfs_write_pt) {
-		vfs_write_pt = (vfs_write_func *)
-			(uintptr_t)kallsyms_lookup_name("vfs_write");
-		if (IS_ERR_OR_NULL(vfs_write_pt)) {
-			tloge("fail to find symbol vfs write\n");
-			return -EINVAL;
-		}
-	}
-	return vfs_write_pt(file, buf, count, pos);
-#else
-	return vfs_write(file, buf, count, pos);
-#endif
-}
-
-ssize_t koadpt_vfs_read(struct file *file, char __user *buf,
-	size_t count, loff_t *pos)
-{
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(4, 19, 116))
-	static vfs_read_func *vfs_read_pt = NULL;
-
-	if (!file || !buf || !pos)
-		return -EINVAL;
-
-	if (!vfs_read_pt) {
-		vfs_read_pt = (vfs_read_func *)
-			(uintptr_t)kallsyms_lookup_name("vfs_read");
-		if (IS_ERR_OR_NULL(vfs_read_pt)) {
-			tloge("fail to find symbol vfs read\n");
-			return -EINVAL;
-		}
-	}
-	return vfs_read_pt(file, buf, count, pos);
-#else
-	return vfs_read(file, buf, count, pos);
 #endif
 }
 
 struct page *koadpt_alloc_pages(gfp_t gfp_mask, unsigned int order)
 {
 #ifdef CONFIG_NUMA
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+	return alloc_pages(gfp_mask, order);
+#else
 	static alloc_pages_func *alloc_pages_pt = NULL;
 
 	if (!alloc_pages_pt) {
@@ -157,6 +96,7 @@ struct page *koadpt_alloc_pages(gfp_t gfp_mask, unsigned int order)
 		}
 	}
 	return alloc_pages_pt(gfp_mask, order);
+#endif
 #else
 	return alloc_pages(gfp_mask, order);
 #endif
@@ -164,6 +104,26 @@ struct page *koadpt_alloc_pages(gfp_t gfp_mask, unsigned int order)
 
 struct workqueue_attrs *koadpt_alloc_workqueue_attrs(gfp_t gfp_mask)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+	struct workqueue_attrs *attrs;
+	(void)gfp_mask;
+
+	attrs = kzalloc(sizeof(*attrs), GFP_KERNEL);
+	if (!attrs) {
+		tloge("alloc workqueue attr fail\n");
+		return NULL;
+	}
+
+	if (alloc_cpumask_var(&attrs->cpumask, GFP_KERNEL) == false) {
+		tloge("alloc cpumask var fail\n");
+		kfree(attrs);
+		return NULL;
+	}
+
+	cpumask_copy(attrs->cpumask, cpu_possible_mask);
+
+	return attrs;
+#else
 	static alloc_workqueue_attrs_func *alloc_workqueue_attrs_pt = NULL;
 
 	if (!alloc_workqueue_attrs_pt) {
@@ -175,10 +135,18 @@ struct workqueue_attrs *koadpt_alloc_workqueue_attrs(gfp_t gfp_mask)
 		}
 	}
 	return alloc_workqueue_attrs_pt(gfp_mask);
+#endif
 }
 
 void koadpt_free_workqueue_attrs(struct workqueue_attrs *attrs)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+	if (!attrs)
+		return;
+
+	free_cpumask_var(attrs->cpumask);
+	kfree(attrs);
+#else
 	static free_workqueue_attrs_func *free_workqueue_attrs_pt = NULL;
 
 	if (!attrs)
@@ -193,4 +161,5 @@ void koadpt_free_workqueue_attrs(struct workqueue_attrs *attrs)
 		}
 	}
 	free_workqueue_attrs_pt(attrs);
+#endif
 }

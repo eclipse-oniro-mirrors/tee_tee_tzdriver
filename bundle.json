@@ -16,19 +16,15 @@
       "rom": "400KB",
       "ram": "400KB",
       "deps": {
-        "components": [ 
-          "kernel",
-          "libmbedtls"
-        ],
-        "third_party": [
-          "bounds_checking_function",
-          "mbedtls"
-        ]
+        "components": [],
+        "third_party": []
       },
       "build": {
         "sub_component": [],
         "inner_kits": [],
-        "test": []
+        "test": [
+            "//base/tee/tee_tzdriver/test/fuzztest/teetzdriver:fuzztest"
+        ]
       }
     }
 }

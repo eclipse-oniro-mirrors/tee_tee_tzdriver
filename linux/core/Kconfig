@@ -27,6 +27,13 @@ config TA_AFFINITY_CPU_NUMS
 	help
 	  consistent with CONFIG_MAX_NUM_NODES in TEE
 
+config TEECD_AUTH
+	bool "Teec Daemon Path Hash Auth"
+	default n
+	depends on TZDRIVER
+	help
+	  TEEOS TEECD path hash auth
+
 config TEE_AUDIT
 	bool "Audit TA"
 	default n
@@ -41,9 +48,16 @@ config KERNEL_CLIENT
 	help
 	  Kernel Client Interface
 
-config BIG_SESSION
+config IBG_SESSION
 	bool "open more sessions"
 	default n
 	depends on TZDRIVER
 	help
 	  TEEOS open more sessions
+
+config FFA_SUPPORT
+	bool "FFA Support Enable"
+	default n
+	depends on TZDRIVER
+	help
+	  FFA Support Enable

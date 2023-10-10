@@ -3,15 +3,16 @@
  *
  * memory operation for gp sharedmem.
  *
- * Copyright (C) 2022 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
  *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
 #include "mem.h"
@@ -32,6 +33,7 @@
 #include "agent.h"
 #include "tc_ns_log.h"
 #include "mailbox_mempool.h"
+#include "internal_functions.h"
 #include "reserved_mempool.h"
 
 void tc_mem_free(struct tc_ns_shared_mem *shared_mem)
@@ -45,7 +47,11 @@ void tc_mem_free(struct tc_ns_shared_mem *shared_mem)
 	}
 
 	if (shared_mem->kernel_addr) {
+#ifndef CONFIG_LIBLINUX
 		vfree(shared_mem->kernel_addr);
+#else
+		kfree(shared_mem->kernel_addr);
+#endif
 		shared_mem->kernel_addr = NULL;
 	}
 	kfree(shared_mem);
@@ -54,9 +60,9 @@ void tc_mem_free(struct tc_ns_shared_mem *shared_mem)
 static void init_shared_mem(struct tc_ns_shared_mem *sh, void *addr, size_t len)
 {
 	sh->kernel_addr = addr;
-	sh->len = len;
-	sh->user_addr = NULL;
-	sh->user_addr_ca = NULL;
+	sh->len = (uint32_t)len;
+	sh->user_addr = INVALID_MAP_ADDR;
+	sh->user_addr_ca = INVALID_MAP_ADDR;
 	atomic_set(&sh->usage, 0);
 }
 struct tc_ns_shared_mem *tc_mem_allocate(size_t len)
@@ -72,8 +78,9 @@ struct tc_ns_shared_mem *tc_mem_allocate(size_t len)
 	shared_mem->mem_type = VMALLOC_TYPE;
 	len = ALIGN(len, SZ_4K);
 	if (exist_res_mem()) {
-		if (len > RESEVED_MAX_ALLOC_SIZE || len > RESERVED_MEM_POOL_SIZE) {
+		if (len > get_res_mem_slice_size()) {
 			tloge("allocate reserved mem size too large\n");
+			kfree(shared_mem);
 			return ERR_PTR(-EINVAL);
 		}
 		addr = reserved_mem_alloc(len);
@@ -90,9 +97,13 @@ struct tc_ns_shared_mem *tc_mem_allocate(size_t len)
 		kfree(shared_mem);
 		return ERR_PTR(-EINVAL);
 	}
+#ifndef CONFIG_LIBLINUX
 	addr = vmalloc_user(len);
+#else
+	addr = kzalloc(len, GFP_KERNEL);
+#endif
 	if (!addr) {
-		tloge("alloc maibox failed\n");
+		tloge("alloc mailbox failed\n");
 		kfree(shared_mem);
 		return ERR_PTR(-ENOMEM);
 	}

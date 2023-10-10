@@ -3,15 +3,16 @@
  *
  * function declaration for load app operations for kernel CA.
  *
- * Copyright (C) 2022 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2021-2022 Huawei Technologies Co., Ltd.
  *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
 
@@ -25,7 +26,6 @@
 static int32_t teek_open_app_file(struct file *fp, char **file_buf, uint32_t total_img_len)
 {
 	loff_t pos = 0;
-	mm_segment_t old_fs;
 	uint32_t read_size;
 	char *file_buffer = NULL;
 
@@ -40,13 +40,7 @@ static int32_t teek_open_app_file(struct file *fp, char **file_buf, uint32_t tot
 		return TEEC_ERROR_GENERIC;
 	}
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	read_size = (uint32_t)koadpt_vfs_read(fp, file_buffer, total_img_len, &pos);
-
-	set_fs(old_fs);
-
+	read_size = (uint32_t)kernel_read(fp, file_buffer, total_img_len, &pos);
 	if (read_size != total_img_len) {
 		tloge("read ta file failed, read size/total size=%u/%u\n", read_size, total_img_len);
 		vfree(file_buffer);
@@ -66,6 +60,12 @@ static int32_t teek_read_app(const char *load_file, char **file_buf, uint32_t *f
 	fp = filp_open(load_file, O_RDONLY, 0);
 	if (!fp || IS_ERR(fp)) {
 		tloge("open file error %ld\n", PTR_ERR(fp));
+		return TEEC_ERROR_BAD_PARAMETERS;
+	}
+
+	if (!fp->f_inode) {
+		tloge("node is NULL\n");
+		filp_close(fp, 0);
 		return TEEC_ERROR_BAD_PARAMETERS;
 	}
 
@@ -95,8 +95,8 @@ int32_t teek_get_app(const char *ta_path, char **file_buf, uint32_t *file_len)
 {
 	int32_t ret;
 
-	/* ta path is NULL or user CA means no need to load TA */
-	if (!ta_path || current->mm != NULL)
+	/* ta path is NULL means no need to load TA */
+	if (!ta_path)
 		return TEEC_SUCCESS;
 
 	if (!file_buf || !file_len) {

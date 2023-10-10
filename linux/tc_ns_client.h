@@ -37,9 +37,9 @@
 #endif
 
 #if (KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE)
-#define mm_sem_lock(mm) mm->mmap_lock
+#define mm_sem_lock(mm) (mm)->mmap_lock
 #else
-#define mm_sem_lock(mm) mm->mmap_sem
+#define mm_sem_lock(mm) (mm)->mmap_sem
 #endif
 
 struct tc_ns_client_login {
@@ -49,18 +49,19 @@ struct tc_ns_client_login {
 
 union tc_ns_client_param {
 	struct {
-		__u64 buffer;
-		__u64 offset;
-		__u64 size_addr;
+		__u32 buffer;
+		__u32 buffer_h_addr;
+		__u32 offset;
+		__u32 h_offset;
+		__u32 size_addr;
+		__u32 size_h_addr;
 	} memref;
 	struct {
-		__u64 a_addr;
-		__u64 b_addr;
+		__u32 a_addr;
+		__u32 a_h_addr;
+		__u32 b_addr;
+		__u32 b_h_addr;
 	} value;
-	struct {
-		__u64 buffer;
-		__u64 size_addr;
-	} sharedmem;
 };
 
 struct tc_ns_client_return {
@@ -81,7 +82,10 @@ struct tc_ns_client_context {
 	unsigned int file_size;
 	union {
 		char *file_buffer;
-		unsigned long long file_addr;
+		struct {
+			uint32_t file_addr;
+			uint32_t file_h_addr;
+		} memref;
 	};
 };
 
@@ -95,17 +99,27 @@ enum secfile_type_t {
 	LOAD_SERVICE,
 	LOAD_LIB,
 	LOAD_DYNAMIC_DRV,
+	LOAD_PATCH,
+	LOAD_TYPE_MAX,
+};
+
+struct sec_file_info {
+	enum secfile_type_t secfile_type;
+	uint32_t file_size;
+	int32_t sec_load_err;
 };
 
 struct load_secfile_ioctl_struct {
-	enum secfile_type_t secfile_type;
+	struct sec_file_info sec_file_info;
 	unsigned char uuid[UUID_LEN];
-	uint32_t file_size;
 	union {
 		char *file_buffer;
-		unsigned long long file_addr;
+		struct {
+			uint32_t file_addr;
+			uint32_t file_h_addr;
+		} memref;
 	};
-};
+}__attribute__((packed));
 
 struct agent_ioctl_args {
 	uint32_t id;
@@ -119,16 +133,20 @@ struct agent_ioctl_args {
 struct tc_ns_client_crl {
 	union {
 		uint8_t *buffer;
-		unsigned long long addr;
+		struct {
+			uint32_t buffer_addr;
+			uint32_t buffer_h_addr;
+		} memref;
 	};
 	uint32_t size;
 };
 
-#define TST_CMD_01 1
-#define TST_CMD_02 2
-#define TST_CMD_03 3
-#define TST_CMD_04 4
-#define TST_CMD_05 5
+#ifdef CONFIG_LOG_POOL_ENABLE
+struct tc_ns_log_pool {
+	uint64_t addr;
+	uint64_t size;
+};
+#endif
 
 #define MAX_SHA_256_SZ 32
 
@@ -158,8 +176,6 @@ struct tc_ns_client_crl {
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 13, struct tc_ns_client_context)
 #define TC_NS_CLIENT_IOCTL_LOGIN \
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 14, int)
-#define TC_NS_CLIENT_IOCTL_TST_CMD_REQ \
-	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 15, int)
 #define TC_NS_CLIENT_IOCTL_TUI_EVENT \
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 16, int)
 #define TC_NS_CLIENT_IOCTL_SYC_SYS_TIME \
@@ -172,9 +188,12 @@ struct tc_ns_client_crl {
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 20, unsigned int)
 #define TC_NS_CLIENT_IOCTL_GET_TEE_VERSION \
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 21, unsigned int)
-#define TC_NS_CLIENT_IOCTL_UNMAP_SHARED_MEM \
-	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 22, unsigned int)
 #define TC_NS_CLIENT_IOCTL_UPDATE_TA_CRL\
-	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 23, struct tc_ns_client_crl)
-
+	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 22, struct tc_ns_client_crl)
+#ifdef CONFIG_LOG_POOL_ENABLE
+#define TC_NS_CLIENT_IOCTL_GET_LOG_POOL \
+	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 23, struct tc_ns_log_pool)
+#endif
+#define TC_NS_CLIENT_IOCTL_UNMAP_SHARED_MEM \
+	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 24, unsigned int)
 #endif

@@ -12,10 +12,29 @@ config TEE_LOG_ACHIVE_PATH
 	help
 	  Last tee msg log path
 
+config TEE_LOG_EXCEPTION
+	bool "Log Exception Info to Imonitor"
+	default n
+	depends on TEELOG
+	help
+	  Log exception info to imonitor
+
 choice
 	prompt "Register tee log Mem"
 	default PAGES_MEM
 	depends on TEELOG
+
+config RDR_MEM
+	bool "Register rdr log mem"
+	depends on DFX_BB
+	help
+	  Register rdr log mem
+
+config BBOX_MEM
+	bool "Register bbox log mem"
+	depends on MNTN
+	help
+	  Register bbox log mem
 
 config PAGES_MEM
 	bool "Register pages log mem"
