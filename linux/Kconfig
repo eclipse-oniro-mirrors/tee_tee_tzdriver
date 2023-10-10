@@ -7,6 +7,20 @@ config TZDRIVER
 	  Provides a communication interface between userspace and
 	  TrustZone Operating Environment.
 
+config SECBOOT_IMG
+	bool "tzdriver split secboot img into modem and ap"
+	default n
+	depends on KERNEL_CLIENT
+	help
+	  Macro defined for splitting modem and ap img
+
+config SECBOOT_IMG_V2
+	bool "tzdriver split modem and ap for v2"
+	default n
+	depends on KERNEL_CLIENT
+	help
+	  Macro defined for splitting modem and ap img v2
+
 config ASAN_DEBUG
 	bool "ASAN debug version"
 	default n
@@ -16,5 +30,8 @@ config ASAN_DEBUG
 source  "../../../../base/tee/tee_tzdriver/linux/auth/Kconfig"
 source  "../../../../base/tee/tee_tzdriver/linux/core/Kconfig"
 source  "../../../../base/tee/tee_tzdriver/linux/tlogger/Kconfig"
+source  "../../../../base/tee/tee_tzdriver/linux/agent_rpmb/Kconfig"
+source  "../../../../base/tee/tee_tzdriver/linux/ion/Kconfig"
+source  "../../../../base/tee/tee_tzdriver/linux/tui/Kconfig"
 endmenu
 

@@ -35,11 +35,6 @@
 const struct cred *koadpt_get_task_cred(struct task_struct *task);
 void koadpt_kthread_bind_mask(struct task_struct *task,
 	const struct cpumask *mask);
-long koadpt_sys_chown(const char __user *filename, uid_t user, gid_t group);
-ssize_t koadpt_vfs_write(struct file *file, const char __user *buf,
-	size_t count, loff_t *pos);
-ssize_t koadpt_vfs_read(struct file *file, char __user *buf,
-	size_t count, loff_t *pos);
 struct page *koadpt_alloc_pages(gfp_t gfp_mask, unsigned int order);
 struct workqueue_attrs *koadpt_alloc_workqueue_attrs(gfp_t gfp_mask);
 void koadpt_free_workqueue_attrs(struct workqueue_attrs *attrs);
@@ -55,32 +50,6 @@ static inline void koadpt_kthread_bind_mask(struct task_struct *task,
 	const struct cpumask *mask)
 {
 	kthread_bind_mask(task, mask);
-}
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0))
-static inline long koadpt_sys_chown(const char __user *filename,
-	uid_t user, gid_t group)
-{
-	return sys_chown(filename, user, group);
-}
-#else
-static inline long koadpt_sys_chown(const char __user *filename,
-	uid_t user, gid_t group)
-{
-	return ksys_chown(filename, user, group);
-}
-#endif
-
-static inline ssize_t koadpt_vfs_read(struct file *file, char __user *buf,
-	size_t count, loff_t *pos)
-{
-	return vfs_read(file, buf, count, pos);
-}
-
-static inline ssize_t koadpt_vfs_write(struct file *file, const char __user *buf,
-	size_t count, loff_t *pos)
-{
-	return vfs_write(file, buf, count, pos);
 }
 
 static inline struct page *koadpt_alloc_pages(gfp_t gfp_mask, unsigned int order)

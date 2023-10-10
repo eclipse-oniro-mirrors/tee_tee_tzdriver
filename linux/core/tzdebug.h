@@ -1,17 +1,18 @@
 /*
  * tzdebug.h
  *
- * for tzdriver debug
+ * function for find symbols not exported
  *
- * Copyright (C) 2022 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
  *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
 #ifndef TZDEBUG_H
@@ -24,7 +25,6 @@ struct ta_mem {
 	uint32_t pmem_max;
 	uint32_t pmem_limit;
 };
-
 #define MEMINFO_TA_MAX 100
 struct tee_mem {
 	uint32_t total_mem;
@@ -38,6 +38,6 @@ struct tee_mem {
 int get_tee_meminfo(struct tee_mem *meminfo);
 void tee_dump_mem(void);
 int tzdebug_init(void);
-void tzdebug_exit(void);
+void free_tzdebug(void);
 
 #endif
