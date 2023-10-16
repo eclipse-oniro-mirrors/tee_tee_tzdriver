@@ -31,7 +31,7 @@ int tc_ns_send_cmd(struct tc_ns_dev_file *dev_file,
 int tc_ns_load_image(struct tc_ns_dev_file *dev, const char *file_buffer,
 	unsigned int file_size, unsigned int *ret_origin, enum secfile_type_t type);
 int tc_ns_load_image_with_lock(struct tc_ns_dev_file *dev,
-	const char *buffer, unsigned int file_size, enum secfile_type_t type);
+	const char *file_buffer, unsigned int file_size, enum secfile_type_t type);
 void close_unclosed_session_in_kthread(struct tc_ns_dev_file *dev);
 struct tc_ns_session *tc_find_session_by_uuid(unsigned int dev_file_id,
 	const struct tc_ns_smc_cmd *cmd);

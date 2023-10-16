@@ -45,18 +45,6 @@ static mutex_t g_device_file_cnt_lock = PTHREAD_MUTEX_INITIALIZER;
 /* dev node list and itself has mutex to avoid race */
 struct tc_ns_dev_list g_tc_ns_dev_list;
 
-static LosTaskCB *g_teecd_task;
-
-void set_teecd_task(LosTaskCB* task)
-{
-	g_teecd_task = task;
-}
-
-LosTaskCB *get_teecd_task(void)
-{
-	return g_teecd_task;
-}
-
 struct tc_ns_dev_list *get_dev_list(void)
 {
 	return &g_tc_ns_dev_list;
@@ -447,8 +435,6 @@ static void release_vma_shared_mem(struct tc_ns_dev_file *dev_file,
 
 static int shared_vma_close(struct tc_ns_dev_file *dev_file, const unsigned int argp)
 {
-	bool check_value = false;
-
 	if (dev_file == NULL) {
 		tloge("unmap input error\n");
 		return -EINVAL;
@@ -458,17 +444,6 @@ static int shared_vma_close(struct tc_ns_dev_file *dev_file, const unsigned int 
 	if (!vma) {
 		tloge("vma is null\n");
 		return -EINVAL;
-	}
-
-	check_value = (is_teecd_process(g_teecd_task, OsCurrTaskGet())) &&
-		(!tc_ns_get_uid());
-	if (check_value) {
-		check_value = (g_teecd_task->taskStatus & OS_TASK_STATUS_EXIT) ||
-			(OsCurrTaskGet()->taskStatus & OS_TASK_STATUS_EXIT);
-		if (check_value) {
-			tlogd("teecd is killed, just return in vma close\n");
-			return -EINVAL;
-		}
 	}
 
 	release_vma_shared_mem(dev_file, vma);
@@ -624,10 +599,11 @@ static int ioctl_unregister_agent(const struct tc_ns_dev_file *dev_file,
 }
 
 /* ioctls for the secure storage daemon */
-static long tc_agent_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long public_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int ret = -EINVAL;
 	struct tc_ns_dev_file *dev_file = file->f_priv;
+	void *argp = (void __user *)(uintptr_t)arg;
 
 	if (!dev_file) {
 		tloge("invalid params\n");
@@ -647,16 +623,9 @@ static long tc_agent_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	case TC_NS_CLIENT_IOCTL_UNREGISTER_AGENT:
 		ret = ioctl_unregister_agent(dev_file, arg);
 		break;
-	case TC_NS_CLIENT_IOCTL_SYC_SYS_TIME:
-		ret = tc_ns_sync_sys_time(
-			(struct tc_ns_client_time *)(uintptr_t)arg);
-		break;
-	case TC_NS_CLIENT_IOCTL_SET_NATIVE_IDENTITY:
-		ret = tc_ns_set_native_hash(arg, GLOBAL_CMD_ID_SET_CA_HASH);
-		break;
-	case TC_NS_CLIENT_IOCTL_LATEINIT:
-		ret = tc_ns_late_init(arg);
-		break;
+	case TC_NS_CLIENT_IOCTL_LOAD_APP_REQ:
+		ret = tc_ns_load_secfile(dev_file, argp);
+	break;
 	default:
 		tloge("invalid cmd! 0x%x\n", cmd);
 		break;
@@ -690,6 +659,85 @@ uint32_t tc_ns_get_uid(void)
 	return get_task_uid(OsCurrTaskGet());
 }
 
+static long tc_private_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	int ret = -EINVAL;
+	switch (cmd) {
+	case TC_NS_CLIENT_IOCTL_SET_NATIVE_IDENTITY:
+		ret = tc_ns_set_native_hash(arg, GLOBAL_CMD_ID_SET_CA_HASH);
+		break;
+	case TC_NS_CLIENT_IOCTL_LATEINIT:
+		ret = tc_ns_late_init(arg);
+		break;
+	case TC_NS_CLIENT_IOCTL_SYC_SYS_TIME:
+		ret = tc_ns_sync_sys_time(
+			(struct tc_ns_client_time *)(uintptr_t)arg);
+		break;
+	default:
+		ret = public_ioctl(file, cmd, arg);
+		break;
+	}
+	return ret;
+}
+
+static int get_agent_id(int cmd, unsigned long arg, uint32_t *agent_id)
+{
+	struct agent_ioctl_args args;
+	int ret = 0;
+	switch (cmd) {
+	case TC_NS_CLIENT_IOCTL_WAIT_EVENT:
+	case TC_NS_CLIENT_IOCTL_SEND_EVENT_RESPONSE:
+	case TC_NS_CLIENT_IOCTL_UNREGISTER_AGENT:
+		*agent_id = (unsigned int)arg;
+		break;
+	case TC_NS_CLIENT_IOCTL_REGISTER_AGENT:
+		if (!arg) {
+			tloge("arg is NULL\n");
+			ret = -EFAULT;
+			break;
+		}
+		if (copy_from_user(&args, (void *)(uintptr_t)arg, sizeof(args))) {
+			tloge("copy from user failed\n");
+			ret = -EFAULT;
+			break;
+		}
+		*agent_id = args.id;
+		break;
+	default:
+		tloge("invalid cmd! 0x%x\n", cmd);
+		break;
+	}
+	return ret;
+}
+
+static int tc_client_agent_ioctl(struct file *file, int cmd,
+	unsigned long arg)
+{
+	unsigned int agent_id = 0;
+	int ret = -EFAULT;
+	switch (cmd) {
+	case TC_NS_CLIENT_IOCTL_WAIT_EVENT:
+	case TC_NS_CLIENT_IOCTL_SEND_EVENT_RESPONSE:
+	case TC_NS_CLIENT_IOCTL_REGISTER_AGENT:
+	case TC_NS_CLIENT_IOCTL_UNREGISTER_AGENT:
+		if (get_agent_id(cmd, arg, &agent_id)) {
+			tloge("can not get agent id\n");
+			return -EFAULT;
+		}
+		if (check_ext_agent_access(OsCurrTaskGet(), agent_id)) {
+			tloge("the agent id is not access\n");
+			return -EFAULT;
+		}
+		ret = public_ioctl(file, cmd, arg);
+		break;
+	default:
+		tloge("invalid cmd\n");
+		break;
+	}
+
+	return ret;
+}
+
 static int tc_client_ioctl(struct file *file, int cmd,
 	unsigned long arg)
 {
@@ -704,23 +752,11 @@ static int tc_client_ioctl(struct file *file, int cmd,
 	case TC_NS_CLIENT_IOCTL_SEND_CMD_REQ:
 		ret = tc_client_session_ioctl(file, cmd, arg);
 		break;
-	case TC_NS_CLIENT_IOCTL_LOAD_APP_REQ:
-		ret = tc_ns_load_secfile(dev_file, argp);
-		break;
 	case TC_NS_CLIENT_IOCTL_CANCEL_CMD_REQ:
 		ret = tc_ns_send_cancel_cmd(dev_file, argp, &client_context);
 		break;
 	case TC_NS_CLIENT_IOCTL_LOGIN:
 		ret = tc_ns_client_login_func(dev_file, argp);
-		break;
-	case TC_NS_CLIENT_IOCTL_WAIT_EVENT:
-	case TC_NS_CLIENT_IOCTL_SEND_EVENT_RESPONSE:
-	case TC_NS_CLIENT_IOCTL_REGISTER_AGENT:
-	case TC_NS_CLIENT_IOCTL_UNREGISTER_AGENT:
-	case TC_NS_CLIENT_IOCTL_SYC_SYS_TIME:
-	case TC_NS_CLIENT_IOCTL_SET_NATIVE_IDENTITY:
-	case TC_NS_CLIENT_IOCTL_LATEINIT:
-		ret = tc_agent_ioctl(file, cmd, arg);
 		break;
 	case TC_NS_CLIENT_IOCTL_TST_CMD_REQ:
 		ret = tc_ns_tst_cmd(argp);
@@ -731,8 +767,11 @@ static int tc_client_ioctl(struct file *file, int cmd,
 	case TC_NS_CLIENT_IOCTL_UNMAP_SHARED_MEM:
 		ret = shared_vma_close(file->f_priv, (unsigned int)(uintptr_t)argp);
 		break;
+	case TC_NS_CLIENT_IOCTL_LOAD_APP_REQ:
+		ret = tc_ns_load_secfile(dev_file, argp);
+		break;
 	default:
-		tloge("invalid cmd 0x%x! arg 0x%lx\n", cmd, arg);
+		ret = tc_client_agent_ioctl(file, cmd, arg);
 		break;
 	}
 
@@ -744,8 +783,6 @@ static int tc_client_open(struct file *file)
 	int ret;
 	struct tc_ns_dev_file *dev = NULL;
 
-	check_teecd_process();
-
 	file->f_priv = NULL;
 	ret = tc_ns_client_open(&dev, TEE_REQ_FROM_USER_MODE);
 	if (!ret)
@@ -754,51 +791,34 @@ static int tc_client_open(struct file *file)
 	return ret;
 }
 
-static int teec_daemon_close(struct tc_ns_dev_file *dev)
-{
-	if (!dev) {
-		tloge("invalid dev(null)\n");
-		return -EINVAL;
-	}
-
-	del_dev_node(dev);
-	kfree(dev);
-	return 0;
-}
-
 static int tc_client_close(struct file *file)
 {
 	int ret = 0;
 	struct tc_ns_dev_file *dev = file->f_priv;
-	bool check_value = false;
 
 	clean_agent_pid_info(dev);
-	check_value = (is_teecd_process(g_teecd_task, OsCurrTaskGet())) &&
-		(!tc_ns_get_uid());
-	if (check_value) {
-		/* for teecd close fd */
-		check_value = (g_teecd_task->taskStatus & OS_TASK_STATUS_EXIT) ||
-			(OsCurrTaskGet()->taskStatus & OS_TASK_STATUS_EXIT);
-		if (check_value) {
-			tloge("teecd exit\n");
-			if (is_system_agent(dev)) {
-				/* for teecd agent close fd */
-				send_event_response_single(dev);
-				free_dev(dev);
-			} else {
-				/* for ca damon close fd */
-				ret = teec_daemon_close(dev);
-			}
-		} else {
-			/*
-			 * for ca damon close fd when ca damon close fd
-			 *  later than HIDL thread
-			 */
-			ret = tc_ns_client_close(dev);
-		}
+	/* for CA(HIDL thread) close fd */
+	ret = tc_ns_client_close(dev);
+	file->f_priv = NULL;
+
+	return ret;
+}
+
+static int tc_private_close(struct file *file)
+{
+	int ret = 0;
+	struct tc_ns_dev_file *dev = file->f_priv;
+
+	clean_agent_pid_info(dev);
+	/* for teecd close fd */
+	tloge("teecd exit\n");
+	if (is_system_agent(dev)) {
+		/* for teecd agent close fd */
+		send_event_response_single(dev);
+		free_dev(dev);
 	} else {
-		/* for CA(HIDL thread) close fd */
-		ret = tc_ns_client_close(dev);
+		/* for ca damon close fd */
+		ret = free_dev(dev);
 	}
 	file->f_priv = NULL;
 
@@ -842,6 +862,12 @@ static const struct file_operations_vfs g_tc_ns_client_fops = {
 	.mmap = tc_client_mmap,
 };
 
+static const struct file_operations_vfs g_tc_private_fops = {
+	.open = tc_client_open,
+	.close = tc_private_close,
+	.ioctl = tc_private_ioctl,
+};
+
 bool schedule_work_on(int cpu, struct work_struct *work)
 {
 	return queue_work(g_tzdriver_wq, work);
@@ -859,6 +885,11 @@ static int tc_ns_client_init(void)
 		return ret;
 	}
 
+	ret = create_tc_client_device(TC_PRIVATE_DEV_NAME, &g_tc_ns_client_fops);
+	if (ret != EOK) {
+		tloge("create tee device error.\n");
+		return ret;
+	}	
 	ret = memset_s(&g_tc_ns_dev_list, sizeof(g_tc_ns_dev_list), 0,
 		sizeof(g_tc_ns_dev_list));
 	if (ret != EOK)
@@ -879,6 +910,7 @@ static int tc_ns_client_init(void)
 
 destroy_dev:
 	(void)unregister_driver(TC_NS_CLIENT_DEV_NAME);
+	(void)unregister_driver(TC_PRIVATE_DEV_NAME);	
 	return ret;
 }
 
@@ -944,6 +976,7 @@ __init int tc_init(void)
 
 class_device_destroy:
 	(void)unregister_driver(TC_NS_CLIENT_DEV_NAME);
+	(void)unregister_driver(TC_PRIVATE_DEV_NAME);
 	if (g_tzdriver_wq != NULL)
 		destroy_workqueue(g_tzdriver_wq);
 	return ret;

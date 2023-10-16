@@ -1054,11 +1054,14 @@ int tc_ns_open_session(struct tc_ns_dev_file *dev_file,
 	}
 	mutex_init(&session->ta_session_lock);
 
+#ifndef CONFIG_LIBLINUX
 	ret = calc_client_auth_hash(dev_file, context, session);
 	if (ret != 0) {
 		tloge("calc client auth hash failed\n");
 		goto err_free_rsrc;
 	}
+#endif
+
 	ret = proc_open_session(dev_file, context, service, session, flags);
 	if (ret == 0)
 		goto err_clear_param;

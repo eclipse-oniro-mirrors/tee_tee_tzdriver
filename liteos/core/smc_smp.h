@@ -32,21 +32,13 @@ enum tc_ns_cmd_type {
 struct pending_entry {
 	atomic_t users;
 	struct task_struct *task;
-#ifdef CONFIG_TA_AFFINITY
-	struct cpumask ca_mask;
-	struct cpumask ta_mask;
-#endif
 	pid_t pid;
 	wait_queue_head_t wq;
 	atomic_t run;
 	struct list_head list;
 };
 
-#ifdef CONFIG_BIG_SESSION
-#define MAX_SMC_CMD CONFIG_BIG_SESSION
-#else
 #define MAX_SMC_CMD 18
-#endif
 
 #ifdef DIV_ROUND_UP
 #undef DIV_ROUND_UP

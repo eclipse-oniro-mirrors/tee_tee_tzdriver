@@ -761,7 +761,6 @@ out_free_log:
 	return ret;
 }
 
-#ifdef CONFIG_LOGFILE
 static struct log_item *msg_get_next(const unsigned char *buffer_start,
 	uint32_t read_pos, int scope_len, uint32_t max_len)
 {
@@ -795,41 +794,15 @@ static struct log_item *msg_get_next(const unsigned char *buffer_start,
 }
 
 #define OPEN_FILE_MODE          0640U
-#define ROOT_UID                0
-#define ROOT_GID                0
 
-static int tlogger_chown(const char *file_path, uint32_t file_path_len)
-{
-	(void)file_path_len;
-	uid_t user = ROOT_UID;
-	gid_t group = ROOT_GID;
-	int ret;
-
-	get_log_chown(&user, &group);
-
-	/* not need modify chown attr */
-	if (group == ROOT_GID && user == ROOT_UID)
-		return 0;
-
-	ret = (int)koadpt_sys_chown(
-		(const char __user *)file_path, user, group);
-	if (ret) {
-		tloge("sys chown for last teemsg file error\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-static int write_version_to_msg(struct file *filep,
-	loff_t *pos)
+static int write_version_to_msg(int filep)
 {
 	ssize_t write_len;
 
 	/* first write tee versino info */
-	write_len = koadpt_vfs_write(filep, g_log_buffer->flag.version_info,
-		strlen(g_log_buffer->flag.version_info), pos);
-	if (write_len < 0) {
+	write_len = write(filep, g_log_buffer->flag.version_info,
+		strlen((const char *)g_log_buffer->flag.version_info), pos);
+	if (write_len != strlen((const char *)g_log_buffer->flag.version_info)) {
 		tloge("Failed to write to last teemsg version\n");
 		return -1;
 	}
@@ -838,9 +811,8 @@ static int write_version_to_msg(struct file *filep,
 	return 0;
 }
 
-static int write_part_log_to_msg(struct file *filep,
-	const unsigned char *buffer, uint32_t buffer_max_len, loff_t *pos,
-	uint32_t read_off, uint32_t read_off_end)
+static int write_part_log_to_msg(int filep, const unsigned char *buffer, uint32_t buffer_max_len,
+	loff_t *pos, uint32_t read_off, uint32_t read_off_end)
 {
 	struct log_item *next_item = NULL;
 	ssize_t item_len;
@@ -852,9 +824,8 @@ static int write_part_log_to_msg(struct file *filep,
 
 	while (next_item && read_off <= read_off_end) {
 		item_len = next_item->buffer_len + sizeof(*next_item);
-		write_len = koadpt_vfs_write(filep, next_item->log_buffer,
-			next_item->real_len, pos);
-		if (write_len < 0) {
+		write_len = write(filep, next_item->log_buffer, next_item->real_len);
+		if (write_len != next_item->real_len) {
 			tloge("Failed to write last teemsg %zd\n", write_len);
 			return -1;
 		}
@@ -872,18 +843,17 @@ static int write_part_log_to_msg(struct file *filep,
 	return 0;
 }
 
-static int write_log_to_msg(struct file *filep,
-	const unsigned char *buffer, uint32_t buffer_max_len, loff_t *pos,
-	uint32_t read_off, uint32_t read_off_end)
+static int write_log_to_msg(int filep, const unsigned char *buffer, uint32_t buffer_max_len,
+	loff_t *pos, uint32_t read_off, uint32_t read_off_end)
 {
 	if (read_off < read_off_end) {
-		return write_part_log_to_msg(filep, buffer, buffer_max_len, pos,
+		return write_part_log_to_msg(filep, buffer, buffer_max_len,
 			read_off, read_off_end);
 	} else {
-		if (write_part_log_to_msg(filep, buffer, buffer_max_len, pos,
+		if (write_part_log_to_msg(filep, buffer, buffer_max_len,
 			read_off, buffer_max_len) != 0)
 			return -1;
-		return write_part_log_to_msg(filep, buffer, buffer_max_len, pos,
+		return write_part_log_to_msg(filep, buffer, buffer_max_len,
 			0, read_off_end);
 	}
 }
@@ -902,10 +872,10 @@ static void update_dumpmsg_offset(uint32_t *read_start, uint32_t *read_end,
 
 	while (next_item && read_off <= read_off_end) {
 		item_len = next_item->buffer_len + sizeof(*next_item);
-		if (strstr(next_item->log_buffer, DUMP_START_MAGIC)) {
+		if (strstr((const char *)next_item->log_buffer, DUMP_START_MAGIC)) {
 			*read_start = read_off;
 			*dump_start_flag = 1;
-		} else if (strstr(next_item->log_buffer, DUMP_END_MAGIC)) {
+		} else if (strstr((const char *)next_item->log_buffer, DUMP_END_MAGIC)) {
 			*read_end = read_off;
 			*dump_end_flag = 1;
 		}
@@ -959,7 +929,7 @@ static int get_msg_buffer(unsigned char **buffer, uint32_t *buffer_max_len,
 
 	*buffer_max_len = g_log_mem_len - sizeof(*g_log_buffer);
 
-	if (*buffer_max_len > LOG_BUFFER_MAX_LEN)
+	if (*buffer_max_len > LOG_BUFFER_MAX_LEN || *buffer_max_len == 0)
 		return 0;
 
 	*read_start = 0;
@@ -998,29 +968,8 @@ free_res:
 	return ret;
 }
 
-static int open_msg_file(struct file **file,
-	const char *file_path, uint32_t file_path_len)
-{
-	(void)file_path_len;
-	struct file *filep = NULL;
-
-	filep = filp_open(file_path, O_CREAT | O_RDWR | O_TRUNC, OPEN_FILE_MODE);
-	if (!filep || IS_ERR(filep)) {
-		tloge("open last teemsg file err %ld\n", PTR_ERR(filep));
-		return -1;
-	}
-
-	*file = filep;
-	return 0;
-}
-#endif
-
-#ifdef CONFIG_LOGFILE
 int tlogger_store_msg(const char *file_path, uint32_t file_path_len)
 {
-	struct file *filep = NULL;
-	mm_segment_t old_fs;
-	loff_t pos = 0;
 	int ret;
 	uint32_t buffer_max_len = 0;
 	unsigned char *buffer = NULL;
@@ -1044,53 +993,33 @@ int tlogger_store_msg(const char *file_path, uint32_t file_path_len)
 		return ret;
 
 	/* exception handling, store trustedcore exception info to file */
-	ret = open_msg_file(&filep, file_path, file_path_len);
+	int fd = open(file_path, O_CREAT | O_RDWR | O_TRUNC, OPEN_FILE_MODE);
+	if (fd < 0) {
+		tloge("open last teemsg file err %d\n", fd);
+		goto free_res;
+	}
+
+	ret = write_version_to_msg(fd);
 	if (ret)
 		goto free_res;
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
+	ret = write_log_to_msg(fd, buffer, buffer_max_len, read_start, read_end);
 
-	ret = tlogger_chown(file_path, file_path_len);
-	if (ret)
-		goto clear_fs;
-
-	ret = write_version_to_msg(filep, &pos);
-	if (ret)
-		goto clear_fs;
-
-	ret = write_log_to_msg(filep, buffer, buffer_max_len,
-		&pos, read_start, read_end);
-
-clear_fs:
-	set_fs(old_fs);
 free_res:
 	if (buffer) {
 		kfree(buffer);
 		buffer = NULL;
 	}
 
-	if (filep != NULL) {
-		vfs_fsync(filep, 0);
-		filp_close(filep, 0);
+	if (fd > 0) {
+		fsync(fd);
+		close(fd);
 	}
-
 	/* trigger write teeos log */
 	tz_log_write();
 	return ret;
 }
-#else
-int tlogger_store_msg(const char *file_path, uint32_t file_path_len)
-{
-	(void)file_path;
-	(void)file_path_len;
-	return 0;
-}
-#endif
 
-#ifdef DEF_ENG
-#define KERNEL_IMG_IS_ENG 1
-#endif
 int register_mem_to_teeos(uint64_t mem_addr, uint32_t mem_len, bool is_cache_mem)
 {
 	struct tc_ns_smc_cmd smc_cmd = { {0}, 0 };
@@ -1113,9 +1042,6 @@ int register_mem_to_teeos(uint64_t mem_addr, uint32_t mem_len, bool is_cache_mem
 	mb_pack->operation.params[0].value.a = mem_addr;
 	mb_pack->operation.params[0].value.b = mem_addr >> ADDR_TRANS_NUM;
 	mb_pack->operation.params[1].value.a = mem_len;
-#ifdef DEF_ENG
-	mb_pack->operation.params[1].value.b = KERNEL_IMG_IS_ENG;
-#endif
 	/*
 	 * is_cache_mem: true, teeos map this memory for cache
 	 * style; or else map to no cache style

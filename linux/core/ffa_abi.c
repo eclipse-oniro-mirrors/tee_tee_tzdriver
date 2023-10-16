@@ -102,7 +102,7 @@ int ffa_forward_call(struct smc_in_params *in_param, struct smc_out_params *out_
 
 	do {
 		ret = g_ffa_ops->sync_send_receive(g_ffa_dev, &ffa_param);
-		convert_fa_param_to_smc_param(&ffa_param, out_param);
+		convert_ffa_param_to_smc_param(&ffa_param, out_param);
 	} while (out_param->ret == TSP_REQUEST && wait != 0);
 
 	if (ret != 0)

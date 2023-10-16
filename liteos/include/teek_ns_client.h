@@ -27,6 +27,7 @@
 #define TC_NS_CLIENT_IOC_MAGIC  't'
 #define TC_NS_CLIENT_DEV        "tc_ns_client"
 #define TC_NS_CLIENT_DEV_NAME   "/dev/tc_ns_client"
+#define TC_PRIVATE_DEV_NAME   "/dev/tc_private"
 
 #define EXCEPTION_MEM_SIZE (8*1024) /* mem for exception handling */
 #define TSP_REQUEST        0xB2000008
@@ -173,11 +174,7 @@ struct tc_wait_data {
 };
 
 #define NUM_OF_SO 1
-#ifdef CONFIG_CMS_CAHASH_AUTH
-#define KIND_OF_SO 1
-#else
 #define KIND_OF_SO 2
-#endif
 struct tc_ns_session {
 	unsigned int session_id;
 	struct list_head head;

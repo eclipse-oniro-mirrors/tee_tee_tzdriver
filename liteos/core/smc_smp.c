@@ -502,21 +502,8 @@ void put_pending_entry(struct pending_entry *pe)
 	free(pe);
 }
 
-#ifdef CONFIG_TA_AFFINITY
-static void restore_cpu_mask(struct pending_entry *pe)
-{
-	if (cpumask_equal(&pe->ca_mask, &pe->ta_mask))
-		return;
-
-	set_cpus_allowed_ptr(current, &pe->ca_mask);
-}
-#endif
-
 static void release_pending_entry(struct pending_entry *pe)
 {
-#ifdef CONFIG_TA_AFFINITY
-	restore_cpu_mask(pe);
-#endif
 	spin_lock(&g_pend_lock);
 	list_del(&pe->list);
 	spin_unlock(&g_pend_lock);
@@ -528,32 +515,6 @@ static DECLARE_WAIT_QUEUE_HEAD(ipi_th_wait);
 static atomic_t g_siq_th_run;
 
 #define SHADOW_EXIT_RUN			 0x1234dead
-
-/*
- * check ca and ta's affinity is match in 2 scene:
- * 1. when TA is blocked to REE
- * 2. when CA is wakeup by SPI wakeup
- * match_ta_affinity return true if affinity is changed
- */
-#ifdef CONFIG_TA_AFFINITY
-static bool match_ta_affinity(struct pending_entry *pe)
-{
-	if (!cpumask_equal(&current->cpus_allowed, &pe->ta_mask)) {
-		if (set_cpus_allowed_ptr(current, &pe->ta_mask)) {
-			tlogw("set %s affinity failed\n", current->comm);
-			return false;
-		}
-		return true;
-	}
-
-	return false;
-}
-#else
-static inline bool match_ta_affinity(struct pending_entry *pe)
-{
-	return false;
-}
-#endif
 
 struct smc_cmd_ret {
 	unsigned long exit;

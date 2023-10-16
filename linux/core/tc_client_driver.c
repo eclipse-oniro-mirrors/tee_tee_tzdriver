@@ -58,6 +58,7 @@
 #endif
 #include <linux/acpi.h>
 #include <linux/completion.h>
+#include <linux/bitmap.h>
 #include <securec.h>
 #include "smc_smp.h"
 #include "teek_client_constants.h"
@@ -102,9 +103,84 @@ struct dev_node g_tc_private;
 static int g_acpi_irq;
 #endif
 
-static unsigned int g_device_file_cnt = 1;
-static DEFINE_MUTEX(g_device_file_cnt_lock);
 static DEFINE_MUTEX(g_set_ca_hash_lock);
+
+/* dev_file_id rangde in (0, 32767), 32768 use 4k bitmap */
+#define DEV_FILE_ID_MAX 32768u
+
+unsigned long *g_dev_bit_map = NULL;
+static DEFINE_MUTEX(g_dev_bit_map_lock);
+
+static int alloc_dev_bitmap(void)
+{
+	mutex_lock(&g_dev_bit_map_lock);
+	if (g_dev_bit_map == NULL) {
+		g_dev_bit_map = bitmap_alloc(DEV_FILE_ID_MAX, GFP_KERNEL | __GFP_ZERO);
+		if (g_dev_bit_map == NULL) {
+			tloge("alloc bit map failed\n");
+			mutex_unlock(&g_dev_bit_map_lock);
+			return -1;
+		}
+	}
+
+	mutex_unlock(&g_dev_bit_map_lock);
+	return 0;
+}
+
+static void free_dev_bitmap(void)
+{
+	mutex_lock(&g_dev_bit_map_lock);
+	if (g_dev_bit_map != NULL) {
+		bitmap_free(g_dev_bit_map);
+		g_dev_bit_map = NULL;
+	}
+	mutex_unlock(&g_dev_bit_map_lock);
+}
+
+static bool alloc_dev_file_id(unsigned int *dev_file_id)
+{
+	int pos;
+
+	mutex_lock(&g_dev_bit_map_lock);
+	if (dev_file_id == NULL || g_dev_bit_map == NULL) {
+		tloge("invalid param\n");
+		mutex_unlock(&g_dev_bit_map_lock);
+		return false;
+	}
+
+	pos = bitmap_find_free_region(g_dev_bit_map, DEV_FILE_ID_MAX, 0);
+	if (pos < 0) {
+		tloge("dev file fd full, alloc failed, error = %d\n", pos);
+		mutex_unlock(&g_dev_bit_map_lock);
+		return false;
+	}
+
+	*dev_file_id = (unsigned int)pos;
+	tlogd("alloc dev file id = %u", *dev_file_id);
+	mutex_unlock(&g_dev_bit_map_lock);
+	return true;
+}
+
+static void free_dev_file_id(unsigned int dev_file_id)
+{
+	mutex_lock(&g_dev_bit_map_lock);
+	if (g_dev_bit_map == NULL) {
+		tloge("dev file fd bitmap is null\n");
+		mutex_unlock(&g_dev_bit_map_lock);
+		return;
+	}
+
+	if (dev_file_id >= DEV_FILE_ID_MAX) {
+		tloge("dev file fd invalid\n");
+		mutex_unlock(&g_dev_bit_map_lock);
+		return;
+	}
+
+	/* clear dev_file_id bit for reuse */
+	bitmap_release_region(g_dev_bit_map, dev_file_id, 0);
+	tlogd("clear dev file id %u\n", dev_file_id);
+	mutex_unlock(&g_dev_bit_map_lock);
+}
 
 /* dev node list and itself has mutex to avoid race */
 struct tc_ns_dev_list g_tc_ns_dev_list;
@@ -382,13 +458,14 @@ int tc_ns_client_open(struct tc_ns_dev_file **dev_file, uint8_t kernel_api)
 		return -ENOMEM;
 	}
 
+	if (!alloc_dev_file_id(&(dev->dev_file_id))) {
+		kfree(dev);
+		return -ENOMEM;
+	}
+
 	mutex_lock(&g_tc_ns_dev_list.dev_lock);
 	list_add_tail(&dev->head, &g_tc_ns_dev_list.dev_file_list);
 	mutex_unlock(&g_tc_ns_dev_list.dev_lock);
-	mutex_lock(&g_device_file_cnt_lock);
-	dev->dev_file_id = g_device_file_cnt;
-	g_device_file_cnt++;
-	mutex_unlock(&g_device_file_cnt_lock);
 	INIT_LIST_HEAD(&dev->shared_mem_list);
 	dev->login_setup = 0;
 #ifdef CONFIG_AUTH_HASH
@@ -422,6 +499,7 @@ void free_dev(struct tc_ns_dev_file *dev)
 {
 	del_dev_node(dev);
 	tee_agent_clear_dev_owner(dev);
+	free_dev_file_id(dev->dev_file_id);
 	if (memset_s(dev, sizeof(*dev), 0, sizeof(*dev)) != 0)
 		tloge("Caution, memset dev fail!\n");
 	kfree(dev);
@@ -677,16 +755,15 @@ static int ioctl_check_agent_owner(const struct tc_ns_dev_file *dev_file,
 }
 
 /* ioctls for the secure storage daemon */
-int public_ioctl(const struct file *file, unsigned int cmd, unsigned long arg, bool is_from_client_node)
+static int public_ioctl(const struct file *file, unsigned int cmd, unsigned long arg, bool is_from_client_node)
 {
 	int ret = -EINVAL;
-	struct tc_ns_dev_file *dev_file = NULL;
+	struct tc_ns_dev_file *dev_file = file->private_data;
 	void *argp = (void __user *)(uintptr_t)arg;
-	if (file == NULL || file->private_data == NULL) {
+	if (!dev_file) {
 		tloge("invalid params\n");
 		return -EINVAL;
 	}
-	dev_file = file->private_data;
 
 	switch (cmd) {
 	case TC_NS_CLIENT_IOCTL_WAIT_EVENT:
@@ -751,7 +828,7 @@ static int get_agent_id(unsigned long arg, unsigned int cmd, uint32_t *agent_id)
 		*agent_id = (unsigned int)arg;
 		break;
 	case TC_NS_CLIENT_IOCTL_REGISTER_AGENT:
-		if (copy_from_user(&args, (void *)(uintptr_t)arg, sizeof(args)) != 0) {
+		if (copy_from_user(&args, (void *)(uintptr_t)arg, sizeof(args))) {
 			tloge("copy agent args failed\n");
 			return -EFAULT;
 		}
@@ -1191,7 +1268,7 @@ static int tc_ns_client_init(void)
 	ret = load_tz_shared_mem(g_dev_node);
 	if (ret != 0)
 		goto unmap_res_mem;
-	g_driver_class = class_create(TC_NS_CLIENT_DEV);
+	g_driver_class = class_create(THIS_MODULE, TC_NS_CLIENT_DEV);
 	if (IS_ERR_OR_NULL(g_driver_class)) {
 		tloge("class create failed");
 		ret = -ENOMEM;
@@ -1344,10 +1421,17 @@ static __init int tc_init(void)
 		goto class_device_destroy;
 	}
 
+	ret = alloc_dev_bitmap();
+	if (ret != 0) {
+		tloge("alloc dev file id bitmap failed\n");
+		goto class_device_destroy;
+	}
+
 	set_tz_init_flag();
 	return 0;
 
 class_device_destroy:
+	free_dev_bitmap();
 	destory_dev_node(&g_tc_client, g_driver_class);
 	destory_dev_node(&g_tc_private, g_driver_class);
 	class_destroy(g_driver_class);
@@ -1385,6 +1469,7 @@ static void tc_exit(void)
 
 	destory_dev_node(&g_tc_client, g_driver_class);
 	destory_dev_node(&g_tc_private, g_driver_class);
+	free_dev_bitmap();
 	platform_driver_unregister(&g_tz_platform_driver);
 	class_destroy(g_driver_class);
 	free_smc_data();

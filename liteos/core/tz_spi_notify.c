@@ -29,10 +29,6 @@
 #define UUID_SIZE 16
 struct teec_timer_property;
 
-#ifdef DEF_ENG
-static int g_timer_type;
-#endif
-
 enum timer_class_type {
 	/* timer event using timer10 */
 	TIMER_GENERIC,
@@ -64,37 +60,11 @@ struct notify_context_shadow {
 	uint64_t target_tcb;
 };
 
-#ifdef CONFIG_TA_AFFINITY
-
-#define AFF_BITS_SIZE 64
-
-#define AFF_BITS_NUM ((CONFIG_TA_AFFINITY_CPU_NUMS % AFF_BITS_SIZE == 0) ? \
-	(CONFIG_TA_AFFINITY_CPU_NUMS / AFF_BITS_SIZE) : \
-	(CONFIG_TA_AFFINITY_CPU_NUMS / AFF_BITS_SIZE + 1))
-
-#define aff_bits_mask(cpuid) \
-	(1LLU << (cpuid - (cpuid / AFF_BITS_SIZE) * AFF_BITS_SIZE))
-
-struct aff_bits_t {
-	uint64_t aff_bits[AFF_BITS_NUM];
-};
-
-struct notify_context_set_affinity {
-	pid_t ca_thread_id;
-	struct aff_bits_t aff;
-};
-
-#endif
-
 struct notify_context_stats {
 	uint32_t send_s;
 	uint32_t recv_s;
 	uint32_t send_w;
 	uint32_t recv_w;
-#ifdef CONFIG_TA_AFFINITY
-	uint32_t send_af;
-	uint32_t recv_af;
-#endif
 	uint32_t missed;
 };
 
@@ -102,9 +72,6 @@ union notify_context {
 	struct notify_context_timer timer;
 	struct notify_context_wakeup wakeup;
 	struct notify_context_shadow shadow;
-#ifdef CONFIG_TA_AFFINITY
-	struct notify_context_set_affinity affinity;
-#endif
 	struct notify_context_stats  meta;
 };
 
@@ -114,15 +81,8 @@ struct notify_data_entry {
 	union notify_context context;
 };
 
-#ifdef CONFIG_BIG_SESSION
-
-#define NOTIFY_DATA_ENTRY_COUNT \
-	(((PAGE_SIZE * ((1U) << (CONFIG_NOTIFY_PAGE_ORDER))) \
-		/ sizeof(struct notify_data_entry)) - 1)
-#else
 #define NOTIFY_DATA_ENTRY_COUNT \
 	((PAGE_SIZE / sizeof(struct notify_data_entry)) - 1)
-#endif
 
 struct notify_data_struct {
 	struct notify_data_entry entry[NOTIFY_DATA_ENTRY_COUNT];
@@ -140,9 +100,6 @@ enum notify_data_type {
 	NOTIFY_DATA_ENTRY_SHADOW,
 	NOTIFY_DATA_ENTRY_FIQSHD,
 	NOTIFY_DATA_ENTRY_SHADOW_EXIT,
-#ifdef CONFIG_TA_AFFINITY
-	NOTIFY_DATA_ENTRY_SET_AFFINITY,
-#endif
 	NOTIFY_DATA_ENTRY_MAX,
 };
 
@@ -304,11 +261,6 @@ static noinline int get_notify_data_entry(struct notify_data_entry *copy)
 		case NOTIFY_DATA_ENTRY_WAKEUP:
 			g_notify_data->meta.context.meta.recv_w++;
 			break;
-#ifdef CONFIG_TA_AFFINITY
-		case NOTIFY_DATA_ENTRY_SET_AFFINITY:
-			g_notify_data->meta.context.meta.recv_af++;
-			break;
-#endif
 		default:
 			tloge("invalid notify type=%u\n", e->entry_type);
 			goto exit;
@@ -367,50 +319,6 @@ static void tc_notify_shadowexit_fn(const struct notify_data_entry *entry)
 			(int)tc_notify_wakeup->ca_thread_id);
 }
 
-#ifdef CONFIG_TA_AFFINITY
-static void tc_notify_set_affinity(struct notify_data_entry *entry)
-{
-	struct notify_context_set_affinity *af_data = NULL;
-	struct pending_entry *pe = NULL;
-
-	af_data = &(entry->context.affinity);
-	pe = find_pending_entry(af_data->ca_thread_id);
-	if (pe != NULL) {
-		struct cpumask mask;
-		uint32_t i;
-
-		cpumask_clear(&mask);
-		for (i = 0; i < (uint32_t)NR_CPUS; i++) {
-			struct aff_bits_t *aff = &af_data->aff;
-			if (aff->aff_bits[i / AFF_BITS_SIZE] & aff_bits_mask(i))
-				cpumask_set_cpu(i, &mask);
-		}
-
-		/*
-		 * we don't set ca's cpumask here but in ca's own thread
-		 * context after ca is wakeup in smc_send_func, or
-		 * scheduler will set task's allow cpumask failure in that case.
-		 */
-		cpumask_copy(&pe->ta_mask, &mask);
-		smc_wakeup_ca(af_data->ca_thread_id);
-		tlogi("set affinity for ca thread id %u\n", af_data->ca_thread_id);
-		put_pending_entry(pe);
-	} else {
-		tloge("invalid ca thread id %u for set affinity\n",
-			af_data->ca_thread_id);
-		/*
-		 * if a TEE tcb without CA bind(CA is 0) cause a affinity set,
-		 * the CA tid(current cpu context) may wrong
-		 * (in tc_notify_fiqshd_fn, don't init_pending_entry,
-		 * in this case, cannot find pending_entry),
-		 * but we must set affinity for CA otherwise the TA can't run,
-		 * so we wakeup all blocked CA.
-		 */
-		(void)smc_wakeup_broadcast();
-	}
-}
-#endif
-
 static void spi_broadcast_notifications(void)
 {
 	uint32_t missed;
@@ -463,11 +371,6 @@ static void tc_notify_fn(struct work_struct *dummy)
 		case NOTIFY_DATA_ENTRY_SHADOW_EXIT:
 			tc_notify_shadowexit_fn(&copy);
 			break;
-#ifdef CONFIG_TA_AFFINITY
-		case NOTIFY_DATA_ENTRY_SET_AFFINITY:
-			tc_notify_set_affinity(&copy);
-			break;
-#endif
 		default:
 			tloge("invalid entry type = %u\n", copy.entry_type);
 		}
@@ -550,132 +453,12 @@ find_callback:
 	return ret;
 }
 
-#ifdef DEF_ENG
-
-static void timer_callback_func(void *param)
-{
-	struct teec_timer_property *timer_property =
-		(struct teec_timer_property *)param;
-	tlogd("timer property type = %x, timer property timer id = %x\n",
-		timer_property->type, timer_property->timer_id);
-	g_timer_type = (int)timer_property->type;
-}
-
-static void tst_get_timer_type(int *type)
-{
-	*type = g_timer_type;
-}
-
-static void callback_demo_main(const char *uuid)
-{
-	int ret;
-
-	tlogd("step into callback_demo_main\n");
-	ret = tc_ns_register_service_call_back_func(uuid,
-		timer_callback_func, NULL);
-	if (ret)
-		tloge("failed to tc_ns_register_service_call_back_func\n");
-}
-
-static int init_tst_test_context(struct tc_ns_client_context *client_context,
-	const void *argp, int *cmd_id)
-{
-	struct tc_uuid secure_timer_uuid = {
-		0x19b39980, 0x2487, 0x7b84,
-		{0xf4, 0x1a, 0xbc, 0x89, 0x22, 0x62, 0xbb, 0x3d}
-	};
-
-	if (copy_from_user(client_context, argp, sizeof(*client_context))) {
-		tloge("copy from user failed\n");
-		return -ENOMEM;
-	}
-
-	if (!tc_user_param_valid(client_context, 0)) {
-		tloge("param 0 is invalid\n");
-		return -EFAULT;
-	}
-
-	/* a_addr contain the command id */
-	if (copy_from_user(cmd_id,
-		(void *)(uintptr_t)client_context->params[0].value.a_addr,
-		sizeof(*cmd_id))) {
-		tloge("copy from user failed:cmd_id\n");
-		return -ENOMEM;
-	}
-
-	if (memcmp((char *)client_context->uuid, (char *)&secure_timer_uuid,
-		sizeof(struct tc_uuid))) {
-		tloge("request not from secure_timer\n");
-		tloge("request uuid: %x %x %x %x\n",
-			*(client_context->uuid + 0),
-			*(client_context->uuid + 1),
-			*(client_context->uuid + 2),
-			*(client_context->uuid + 3));
-		/* just wanna print the first four characters of uuid */
-		return -EACCES;
-	}
-
-	return 0;
-}
-
-int tc_ns_tst_cmd(void *argp)
-{
-	struct tc_ns_client_context client_context;
-	int ret;
-	int cmd_id;
-	int timer_type;
-
-	if (!argp) {
-		tloge("argp is NULL input buffer\n");
-		return -EINVAL;
-	}
-
-	ret = init_tst_test_context(&client_context, argp, &cmd_id);
-	if (ret)
-		return ret;
-
-	switch (cmd_id) {
-	case TST_CMD_01:
-		callback_demo_main((char *)client_context.uuid);
-		break;
-	case TST_CMD_02:
-		tst_get_timer_type(&timer_type);
-		if (!tc_user_param_valid(&client_context, (unsigned int)1)) {
-			tloge("param 1 is invalid\n");
-			ret = -EINVAL;
-			return ret;
-		}
-		if (copy_to_user(
-			(void *)(uintptr_t)
-			client_context.params[1].value.a_addr,
-			&timer_type, sizeof(timer_type))) {
-			tloge("copy to user failed:timer_type\n");
-			ret = -ENOMEM;
-			return ret;
-		}
-		break;
-	default:
-		ret = -EINVAL;
-		return ret;
-	}
-	if (copy_to_user(argp, &client_context, sizeof(client_context))) {
-		tloge("copy to user failed:client context\n");
-		ret = -ENOMEM;
-		return ret;
-	}
-	return ret;
-}
-
-#else
-
 int tc_ns_tst_cmd(void *argp)
 {
 	(void)argp;
 	tloge("usr img do not support this cmd\n");
 	return 0;
 }
-
-#endif
 
 static int send_notify_cmd(unsigned int cmd_id)
 {
@@ -745,15 +528,8 @@ int tz_spi_init()
 		goto clean;
 
 	if (!g_notify_data) {
-#ifdef CONFIG_BIG_SESSION
-		/* we should map at least 3 pages for 100 sessions, 2^2 > 3 */
-		g_notify_data = (struct notify_data_struct *)
-			(uintptr_t)__get_free_pages(
-			GFP_KERNEL | __GFP_ZERO, CONFIG_NOTIFY_PAGE_ORDER);
-#else
 		g_notify_data = (struct notify_data_struct *)
 			(uintptr_t)__get_free_page(GFP_KERNEL | __GFP_ZERO);
-#endif
 		if (!g_notify_data) {
 			tloge("get free page failed for notification data\n");
 			ret = -ENOMEM;
@@ -789,12 +565,7 @@ void tz_spi_exit(void)
 	if (g_notify_data) {
 		if (send_notify_cmd(GLOBAL_CMD_ID_UNREGISTER_NOTIFY_MEMORY))
 			tloge("unregister notify data mem failed\n");
-#ifdef CONFIG_BIG_SESSION
-		free_pages(g_notify_data,
-			CONFIG_NOTIFY_PAGE_ORDER);
-#else
 		free_page(g_notify_data);
-#endif
 		g_notify_data = NULL;
 	}
 

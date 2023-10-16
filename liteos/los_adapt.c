@@ -295,16 +295,3 @@ int calc_task_so_hash(unsigned char *digest, uint32_t dig_len,
 	finish_tee_sha256(&ctx, digest);
 	return 0;
 }
-
-void check_teecd_process(void)
-{
-	char path[MAX_PATH_SIZE];
-
-	if (get_process_path(OsCurrTaskGet(), path, MAX_PATH_SIZE) == NULL) {
-		tloge("get path failed\n");
-		return;
-	}
-
-	if (strcmp(path, CONFIG_TEECD_PATH) == 0 && get_task_uid(OsCurrTaskGet()) == TEECD_UID)
-		set_teecd_task(OsCurrTaskGet());
-}

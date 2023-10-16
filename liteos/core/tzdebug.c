@@ -25,6 +25,7 @@
 #include "tlogger.h"
 #include "session_manager.h"
 #include "cmdmonitor.h"
+#include "shcmd.h"
 
 #define DEBUG_OPT_LEN 128
 
@@ -313,3 +314,22 @@ void tzdebug_exit(void)
 {
 
 }
+
+int tee_shell_cmd_mem(int argc, const char **argv)
+{
+	char buf[128] = {0};
+	tloge("Begin to show tee mem\n");
+	tzmemdump(buf);
+	return LOS_OK;
+}
+
+int tee_shell_cmd_dump(int argc, const char **argv)
+{
+	char buf[128] = {0};
+	tloge("Begin to show dump mem\n");
+	tzdump(buf);
+	return LOS_OK;
+}
+
+SHELLCMD_ENTRY(teememdump_shellcmd, CMD_TYPE_STD, "teememdump", XARGS, (CmdCallBackFunc)tee_shell_cmd_mem);
+SHELLCMD_ENTRY(teedump_shellcmd, CMD_TYPE_STD, "teedump", XARGS, (CmdCallBackFunc)tee_shell_cmd_dump);

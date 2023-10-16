@@ -48,7 +48,7 @@ config KERNEL_CLIENT
 	help
 	  Kernel Client Interface
 
-config IBG_SESSION
+config BIG_SESSION
 	bool "open more sessions"
 	default n
 	depends on TZDRIVER

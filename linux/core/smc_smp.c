@@ -42,6 +42,9 @@
 #include <linux/version.h>
 #include <linux/cpumask.h>
 #include <linux/err.h>
+#ifdef CONFIG_SCHED_SMT_EXPELLING
+#include <linux/sched/smt.h>
+#endif
 
 #if (KERNEL_VERSION(4, 14, 0) <= LINUX_VERSION_CODE)
 #include <linux/sched/mm.h>
@@ -422,7 +425,7 @@ static void show_in_bitmap(int *cmd_in, uint32_t len)
 		}
 	}
 	bitmap[MAX_SMC_CMD] = '\0';
-	tlogi("in bitmap: %s\n", bitmap);
+	tloge("in bitmap: %s\n", bitmap);
 }
 
 static void show_out_bitmap(int *cmd_out, uint32_t len)
@@ -443,7 +446,7 @@ static void show_out_bitmap(int *cmd_out, uint32_t len)
 		}
 	}
 	bitmap[MAX_SMC_CMD] = '\0';
-	tlogi("out bitmap: %s\n", bitmap);
+	tloge("out bitmap: %s\n", bitmap);
 }
 
 static void show_doing_bitmap(void)
@@ -460,7 +463,7 @@ static void show_doing_bitmap(void)
 			bitmap[idx] = '0';
 	}
 	bitmap[MAX_SMC_CMD] = '\0';
-	tlogi("doing bitmap: %s\n", bitmap);
+	tloge("doing bitmap: %s\n", bitmap);
 }
 
 static void show_single_cmd_info(const int *cmd, uint32_t len)
@@ -473,7 +476,7 @@ static void show_single_cmd_info(const int *cmd, uint32_t len)
 	for (idx = 0; idx < MAX_SMC_CMD; idx++) {
 		if (cmd[idx] == -1)
 			break;
-		tlogi("cmd[%d]: cmd_id=%u, ca_pid=%u, dev_id = 0x%x, "
+		tloge("cmd[%d]: cmd_id=%u, ca_pid=%u, dev_id = 0x%x, "
 			"event_nr=%u, ret_val=0x%x\n",
 			cmd[idx],
 			g_cmd_data->in[cmd[idx]].cmd_id,
@@ -514,10 +517,10 @@ void show_cmd_bitmap(void)
 	show_doing_bitmap();
 	show_out_bitmap(cmd_out, MAX_SMC_CMD);
 
-	tlogi("cmd in value:\n");
+	tloge("cmd in value:\n");
 	show_single_cmd_info(cmd_in, MAX_SMC_CMD);
 
-	tlogi("cmd_out value:\n");
+	tloge("cmd_out value:\n");
 	show_single_cmd_info(cmd_out, MAX_SMC_CMD);
 
 	release_smc_buf_lock(&g_cmd_data->smc_lock);
@@ -830,7 +833,7 @@ static uint64_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr, uint32_t cmd_ty
 	return ret;
 }
 
-static unsigned long raw_smc_send(uint32_t cmd, phys_addr_t cmd_addr,
+unsigned long raw_smc_send(uint32_t cmd, phys_addr_t cmd_addr,
 	uint32_t cmd_type, uint8_t wait)
 {
 	unsigned long x0;
@@ -1755,10 +1758,13 @@ static int smp_smc_send_func(struct tc_ns_smc_cmd *in, bool reuse)
 	}
 	ops = SMC_OPS_NORMAL;
 
+#ifdef CONFIG_SCHED_SMT_EXPELLING
+	force_smt_expeller_prepare();
+#endif
+
 retry:
 #ifdef CONFIG_TEE_REBOOT
 	if (is_tee_rebooting() && in->cmd_id == GLOBAL_CMD_ID_SET_SERVE_CMD) {
-		release_pending_entry(pe);
 		return TEE_ERROR_IS_DEAD;
 	}
 #endif
@@ -1810,13 +1816,6 @@ static int smc_svc_thread_fn(void *arg)
 	}
 	tloge("smc svc thread stop\n");
 	return 0;
-}
-
-bool __attribute__((weak)) is_tee_hungtask(struct task_struct *task)
-{
-	(void)task;
-
-	return false;
 }
 
 void wakeup_tc_siq(uint32_t siq_mode)
@@ -1896,8 +1895,15 @@ static void smc_work_set_cmd_buffer(struct work_struct *work)
 void smc_set_cmd_buffer(void)
 {
 	struct work_struct work;
+	/*
+	 * If the TEE supports independent reset, the "TEE reset" clears the cmd_buffer information in gtask.
+	 * Therefore, the tzdriver needs to be re-registered cmd_buffer.
+	 * Even if ite has been registerd in the UEFI phase.
+	 */
+#ifndef CONFIG_TEE_RESET
 	if (g_reserved_cmd_buffer)
 		return;
+#endif
 
 	INIT_WORK_ONSTACK(&work, smc_work_set_cmd_buffer);
 	/* Run work on CPU 0 */
@@ -2038,6 +2044,9 @@ int init_smc_svc_thread(void)
 			PTR_ERR(g_smc_svc_thread));
 		return (int)PTR_ERR(g_smc_svc_thread);
 	}
+#ifdef CONFIG_SCHED_SMT_EXPELLING
+	set_task_expeller(g_smc_svc_thread, SMT_EXPELLER_FORCE_LONG);
+#endif
 	tz_kthread_bind_mask(g_smc_svc_thread);
 	wake_up_process(g_smc_svc_thread);
 	return 0;

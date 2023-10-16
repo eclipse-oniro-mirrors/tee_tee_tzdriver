@@ -73,7 +73,8 @@ void init_cmd_monitor(void);
 void free_cmd_monitor(void);
 void do_cmd_need_archivelog(void);
 bool is_thread_reported(pid_t tid);
+void tzdebug_archivelog(void);
 void cmd_monitor_ta_crash(int32_t type, const uint8_t *ta_uuid, uint32_t uuid_len);
-void memstat_report(void);
+void tzdebug_memstat(void);
 void get_time_spec(struct time_spec *time);
 #endif

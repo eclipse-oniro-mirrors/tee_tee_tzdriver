@@ -119,7 +119,7 @@ char *get_proc_dpath(char *path, int path_len)
 
 	rc = sprintf_s(cmdstring, MAX_PATH_SIZE, "/proc/%d/exe", current->tgid);
 	if (rc < 0){
-		tloge("set path in get proc dpath failed\n"):
+		tloge("set path in get proc dpath failed\n");
 		return NULL;
 	}
 

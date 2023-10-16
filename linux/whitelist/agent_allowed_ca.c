@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
+ * Description: allowed_ext_agent_ca list and functions.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 #include "agent.h"
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
@@ -11,16 +25,9 @@ static struct ca_info g_allowed_ext_agent_ca[] = {
 		TEE_SECE_AGENT_ID,
 	},
 	{
-		"/vendor/bin/hw/vendor.huawei.hardware.\
-		biometrics.hwfacerecognize@1.1-service",
-		1000,
+		"/vendor/bin/hw/hdf_devhost",
+		1114,
 		TEE_FACE_AGENT1_ID,
-	},
-		{
-		"/vendor/bin/hw/vendor.huawei.hardware.\
-		biometrics.hwfacerecognize@1.1-service",
-		1000,
-		TEE_FACE_AGENT2_ID,
 	},
 #endif
 #ifdef DEF_ENG

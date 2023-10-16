@@ -11,9 +11,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <linux/arm-smccc.h>
 #include "smc_call.h"
 #include "teek_ns_client.h"
-#include <linux/arm-smccc.h>
 
 #ifndef CONFIG_ARCH32
 void do_smc_transport(struct smc_in_params *in, struct smc_out_params *out, uint8_t wait)

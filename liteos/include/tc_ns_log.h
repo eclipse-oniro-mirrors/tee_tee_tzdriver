@@ -27,13 +27,8 @@ enum {
 };
 #define MOD_TEE "tzdriver"
 
-#ifdef DEF_ENG
-#define TEE_ENG_LOG_MASK 2
-#define TEE_LOG_MASK TEE_ENG_LOG_MASK
-#else
 #define TEE_USR_LOG_MASK 3
 #define TEE_LOG_MASK TEE_USR_LOG_MASK
-#endif
 
 #define tlogv(fmt, args...) \
 do { \

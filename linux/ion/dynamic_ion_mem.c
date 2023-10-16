@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
+ * Description: dynamic Ion memory allocation and free.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 #include "dynamic_ion_mem.h"
 #include <stdarg.h>
 #include <linux/workqueue.h>
@@ -196,7 +210,7 @@ static int proc_alloc_dyn_mem(struct dynamic_mem_item *mem_item)
 
 	if (mem_item->size + BLOCK_64KB_SIZE_MASK < mem_item->size) {
 		tloge("ion size is error, size = %x\n", mem_item->size);
-		return _EINVAL;
+		return -EINVAL;
 	}
 	mem_item->memory.len = (mem_item ->size + BLOCK_64KB_SIZE_MASK) & BLOCK_64KB_MASK;
 
@@ -205,7 +219,7 @@ static int proc_alloc_dyn_mem(struct dynamic_mem_item *mem_item)
 	if (!ion_sg_table) {
 		tloge("failed to get ion page, configid = %d\n",
 			mem_item->configid);
-		return _ENOMEM;
+		return -ENOMEM;
 	}
 	mem_item->memory.dyn_sg_table = ion_sg_table;
 	return 0;
@@ -307,7 +321,7 @@ static int trans_configid2memid(uint32_t configid, uint32_t cafd,
 			break;
 		}
 		/* register to tee */
-		result = send_dyn_ion_cmd(mem_item, GLOBAL_CMD_ID_DEL_DYNAMIC_ION, ret_origin);
+		result = send_dyn_ion_cmd(mem_item, GLOBAL_CMD_ID_ADD_DYNAMIC_ION, ret_origin);
 		if (result != 0) {
 			tloge("register to tee failed, result = %d\n", result);
 			proc_free_dyn_mem(mem_item);
@@ -335,7 +349,7 @@ static void release_configid_mem_locked(uint32_t configid)
 			break;
 		}
 
-		result = send_dyn_ion_cmd(mem_item, GLOBAL_CMD_ID_ADD_DYNAMIC_ION, NULL);
+		result = send_dyn_ion_cmd(mem_item, GLOBAL_CMD_ID_DEL_DYNAMIC_ION, NULL);
 		if (result != 0) {
 			tloge("unregister_from_tee configid=%d, result =%d\n",
 				mem_item->configid, result);

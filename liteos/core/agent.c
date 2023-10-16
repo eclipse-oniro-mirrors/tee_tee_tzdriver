@@ -26,11 +26,7 @@
 #include "los_adapt.h"
 #include "cmdmonitor.h"
 
-#ifdef CONFIG_CMS_CAHASH_AUTH
-#define HASH_FILE_MAX_SIZE         CONFIG_HASH_FILE_SIZE
-#else
 #define HASH_FILE_MAX_SIZE         (16 * 1024)
-#endif
 #define AGENT_BUFF_SIZE            (4 * 1024)
 #define AGENT_MAX                  32
 #define PAGE_ORDER_RATIO           2
@@ -159,11 +155,6 @@ int tc_ns_set_native_hash(unsigned long arg, unsigned int cmd_id)
 	if (!inbuf)
 		return -EINVAL;
 
-	if (tc_ns_get_uid() != TEECD_UID) {
-		tloge("It is a fake tee agent\n");
-		return -EACCES;
-	}
-
 	if (get_buf_len(inbuf, &buf_len))
 		return -EFAULT;
 
@@ -199,11 +190,6 @@ int tc_ns_late_init(unsigned long arg)
 	struct tc_ns_smc_cmd smc_cmd = { {0}, 0 };
 	uint32_t index = (uint32_t)arg; /* index is uint32_t, no truncate risk */
 	struct mb_cmd_pack *mb_pack = NULL;
-
-	if (tc_ns_get_uid() != TEECD_UID) {
-		tloge("It is a fake tee agent\n");
-		return -EACCES;
-	}
 
 	mb_pack = mailbox_alloc_cmd_pack();
 	if (!mb_pack) {
@@ -413,10 +399,6 @@ int tc_ns_wait_event(unsigned int agent_id)
 	int ret = -EINVAL;
 	struct smc_event_data *event_data = NULL;
 
-	if ((tc_ns_get_uid() != TEECD_UID) && check_ext_agent_access(OsCurrTaskGet(), agent_id)) {
-		tloge("It is a fake tee agent\n");
-		return -EPERM;
-	}
 	tlogd("agent %u waits for command\n", agent_id);
 
 	event_data = find_event_control(agent_id);
@@ -440,11 +422,6 @@ int tc_ns_sync_sys_time(const struct tc_ns_client_time *tc_ns_time)
 
 	if (!tc_ns_time) {
 		tloge("tc_ns_time is NULL input buffer\n");
-		return -EINVAL;
-	}
-
-	if (tc_ns_get_uid() != TEECD_UID) {
-		tloge("It is a fake tee agent\n");
 		return -EINVAL;
 	}
 
@@ -480,13 +457,6 @@ static struct smc_event_data *check_response_access(unsigned int agent_id)
 
 	if (!event_data) {
 		tloge("Can't get event_data\n");
-		return NULL;
-	}
-
-	if ((tc_ns_get_uid() != TEECD_UID) &&
-		check_ext_agent_access(OsCurrTaskGet(), agent_id)) {
-		tloge("It is a fake tee agent\n");
-		put_agent_event(event_data);
 		return NULL;
 	}
 
@@ -585,17 +555,6 @@ static int create_new_agent_node(struct tc_ns_dev_file *dev_file,
 	return 0;
 }
 
-static bool is_built_in_agent(unsigned int agent_id)
-{
-	if (agent_id == AGENT_FS_ID ||
-		agent_id == AGENT_MISC_ID ||
-		agent_id == AGENT_SOCKET_ID ||
-		agent_id == SECFILE_LOAD_AGENT_ID)
-		return true;
-
-	return false;
-}
-
 static unsigned long agent_buffer_map(unsigned long buffer, uint32_t size)
 {
 	vaddr_t user_addr;
@@ -631,24 +590,6 @@ err_out:
 	if (LOS_UnMMap(user_addr, size))
 		tloge("munmap failed\n");
 	return -EFAULT;
-}
-
-static bool is_valid_agent(unsigned int agent_id,
-	unsigned int buffer_size, bool user_agent)
-{
-	if ((tc_ns_get_uid() != TEECD_UID) &&
-		check_ext_agent_access(OsCurrTaskGet(), agent_id)) {
-		tloge("It is a fake tee agent\n");
-		return false;
-	}
-
-	if (user_agent && (buffer_size > SZ_4K)) {
-		tloge("size: %u of user agent's shared mem is invalid\n",
-			buffer_size);
-		return false;
-	}
-
-	return true;
 }
 
 void clean_agent_pid_info(struct tc_ns_dev_file *dev_file)
@@ -770,8 +711,11 @@ int tc_ns_register_agent(struct tc_ns_dev_file *dev_file,
 	if (!buffer)
 		return ret;
 
-	if (!is_valid_agent(agent_id, buffer_size, user_agent))
+	if (user_agent && (buffer_size > SZ_4Z)) {
+		tloge("size: %u of user agent's shared mem is invalid\n", 
+			buffer_size);
 		return ret;
+	}
 
 	size_align = ALIGN(buffer_size, SZ_4K);
 
@@ -821,49 +765,12 @@ release_rsrc:
 	return ret;
 }
 
-static int check_for_unregister_agent(unsigned int agent_id)
-{
-	bool check_value = false;
-
-	if ((tc_ns_get_uid() != TEECD_UID) && tc_ns_get_uid() != SYSTEM_UID) {
-		tloge("It is a fake tee agent\n");
-		return -EINVAL;
-	}
-
-	check_value = is_built_in_agent(agent_id);
-
-	if (check_value) {
-		tloge("agent: 0x%x is not allowed to unregister\n", agent_id);
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-bool __attribute__((weak)) is_third_party_agent(unsigned int agent_id)
-{
-	(void)agent_id;
-
-	return false;
-}
-
 int tc_ns_unregister_agent(unsigned int agent_id)
 {
 	struct smc_event_data *event_data = NULL;
 	int ret = 0;
 	struct tc_ns_smc_cmd smc_cmd = { {0}, 0 };
 	struct mb_cmd_pack *mb_pack = NULL;
-
-	if (check_for_unregister_agent(agent_id))
-		return -EINVAL;
-	/*
-	 * if third party itself trigger unregister agent
-	 * we allow them to unregister.
-	 */
-	if (!is_third_party_agent(agent_id)) {
-		tloge("invalid agent id: 0x%x\n", agent_id);
-		return -EACCES;
-	}
 
 	event_data = find_event_control(agent_id);
 	if (!event_data || !event_data->agent_buff_kernel) {

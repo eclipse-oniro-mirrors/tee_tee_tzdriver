@@ -102,7 +102,6 @@ static inline void put_agent_event(struct smc_event_data *event_data)
 
 int is_allowed_agent_ca(const struct ca_info *ca,
 	bool check_agent_id);
-bool is_third_party_agent(unsigned int agent_id);
 void agent_init(void);
 int agent_exit(void);
 struct smc_event_data *find_event_control(unsigned int agent_id);
@@ -125,5 +124,6 @@ int tee_agent_kernel_register(struct tee_agent_kernel_ops *new_agent);
 bool is_system_agent(const struct tc_ns_dev_file *dev_file);
 void tee_agent_clear_dev_owner(const struct tc_ns_dev_file *dev_file);
 void clean_agent_pid_info(struct tc_ns_dev_file *dev_file);
+int check_ext_agent_access(LosTaskCB *ca_task, uint32_t agent_id);
 
 #endif

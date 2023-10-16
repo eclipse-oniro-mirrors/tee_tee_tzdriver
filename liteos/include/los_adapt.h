@@ -157,10 +157,7 @@ LosVmPage *mailbox_pool_alloc_pages(unsigned int order);
 void mailbox_pool_free_pages(LosVmPage *page_array, size_t order);
 char *get_process_path(LosTaskCB *task, char *tpath, int path_len);
 int calc_task_so_hash(unsigned char *digest, uint32_t dig_len, LosTaskCB *cur_struct, int so_index);
-LosTaskCB *get_teecd_task(void);
-void set_teecd_task(LosTaskCB* task);
 int crypto_aescbckey256(unsigned char *output, const unsigned char *input, struct aes_param *param);
-void check_teecd_process(void);
 
 #define INT_SIZE 4
 

@@ -44,7 +44,7 @@ int send_crl_to_tee(const char *crl_buffer, uint32_t crl_len, const struct tc_ns
 	mb_pack = mailbox_alloc_cmd_pack();
 	if (!mb_pack) {
 		tloge("alloc mb pack failed\n");
-		return = -ENOMEM;
+		return -ENOMEM;
 	}
 	mb_param = mailbox_copy_alloc(crl_buffer, crl_len);
 	if (!mb_param) {
