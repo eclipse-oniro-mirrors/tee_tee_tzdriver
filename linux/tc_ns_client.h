@@ -194,6 +194,4 @@ struct tc_ns_log_pool {
 #define TC_NS_CLIENT_IOCTL_GET_LOG_POOL \
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 23, struct tc_ns_log_pool)
 #endif
-#define TC_NS_CLIENT_IOCTL_UNMAP_SHARED_MEM \
-	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 24, unsigned int)
 #endif

@@ -451,7 +451,7 @@ static void spi_broadcast_notifications(void)
 		return;
 	}
 
-	missed = (uint32_t)xchg(&g_notify_data->meta.context.meta.missed, 0);
+	missed = (uint32_t)__xchg(&g_notify_data->meta.context.meta.missed, MISSED_COUNT);
 	if (missed == 0)
 		return;
 	if ((missed & (1U << NOTIFY_DATA_ENTRY_WAKEUP)) != 0) {

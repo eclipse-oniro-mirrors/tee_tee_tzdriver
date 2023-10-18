@@ -44,7 +44,7 @@ enum {
 };
 
 #ifndef CONFIG_TEE_LOG_ACHIVE_PATH
-#define CONFIG_TEE_LOG_ACHIVE_PATH "/data/log/tee/last_teemsg"
+#define CONFIG_TEE_LOG_ACHIVE_PATH "/storage/data/log/tee/last_teemsg"
 #endif
 
 static void get_time_spec(struct time_spec *time)
@@ -307,14 +307,12 @@ struct cmd_monitor *cmd_monitor_log(const struct tc_ns_smc_cmd *cmd)
 		}
 
 		if (!found_flag) {
-#ifndef CONFIG_BIG_SESSION
 			if (g_cmd_monitor_list_size >
 				MAX_CMD_MONITOR_LIST - 1) {
 				tloge("monitor reach max node num\n");
 				monitor = NULL;
 				break;
 			}
-#endif
 			monitor = init_monitor_locked();
 			if (!monitor) {
 				tloge("init monitor failed\n");

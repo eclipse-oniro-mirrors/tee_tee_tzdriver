@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
+ * Description: dynamic ion memory function declaration.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 #ifndef DYNAMIC_MMEM_H
 #define DYNAMIC_MMEM_H
 
@@ -22,8 +36,7 @@ struct sg_memory {
 	void *ion_virt_addr;
 };
 
-struct dynamic_mem_item
-{
+struct dynamic_mem_item {
 	struct list_head head;
 	uint32_t configid;
 	uint32_t size;
@@ -33,8 +46,7 @@ struct dynamic_mem_item
 	uint32_t ddr_sec_region;
 };
 
-struct dynamic_mem_config
-{
+struct dynamic_mem_config {
 	struct tc_uuid uuid;
 	uint32_t ddr_sec_region;
 };
@@ -61,7 +73,7 @@ int load_app_use_configid(uint32_t configid, uint32_t cafd,
 	const struct tc_uuid *uuid, uint32_t size, int32_t *ret_origin);
 void kill_ion_by_cafd(unsigned int cafd);
 void kill_ion_by_uuid(const struct tc_uuid *uuid);
-int load_image_for_ion(const struct load_img_params *params int32_t *ret_origin);
+int load_image_for_ion(const struct load_img_params *params, int32_t *ret_origin);
 int alloc_for_ion_sglist(const struct tc_call_params *call_params,
 	struct tc_op_params *op_params, uint8_t kernel_params,
 	uint32_t param_type, unsigned int index);
@@ -88,13 +100,12 @@ static inline int init_dynamic_mem(void)
 }
 
 static inline int load_app_use_configid(uint32_t configid, uint32_t cafd,
-	const struct tc_uuid *uuid, uint32_t size, int32_t *ret_origin)
+	const struct tc_uuid *uuid, uint32_t size)
 {
 	(void)configid;
 	(void)cafd;
 	(void)uuid;
 	(void)size;
-	(void)ret_origin;
 	return 0;
 }
 

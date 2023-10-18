@@ -52,13 +52,14 @@ static int g_cmd_monitor_list_size;
 /* report 2 hours */
 static const long long g_memstat_report_freq = 2 * 60 * 60 * 1000;
 #define MAX_CMD_MONITOR_LIST 200
-#define MAX_AGENT_CALL_COUNT 250
+#define MAX_AGENT_CALL_COUNT 5000
 static DEFINE_MUTEX(g_cmd_monitor_lock);
 
 /* independent wq to avoid block system_wq */
 static struct workqueue_struct *g_cmd_monitor_wq;
 static struct delayed_work g_cmd_monitor_work;
 static struct delayed_work g_cmd_monitor_work_archive;
+static struct delayed_work g_mem_stat;
 static int g_tee_detect_ta_crash;
 static struct tc_uuid g_crashed_ta_uuid;
 
@@ -73,6 +74,12 @@ void get_time_spec(struct time_spec *time)
 #endif
 }
 
+static void schedule_memstat_work(struct delayed_work *work,
+	unsigned long delay)
+{
+	schedule_delayed_work(work, delay);
+}
+
 static void schedule_cmd_monitor_work(struct delayed_work *work,
 	unsigned long delay)
 {
@@ -82,7 +89,12 @@ static void schedule_cmd_monitor_work(struct delayed_work *work,
 		schedule_delayed_work(work, delay);
 }
 
-static void tz_archivelog(void)
+void tzdebug_memstat(void)
+{
+	schedule_memstat_work(&g_mem_stat, usecs_to_jiffies(S_TO_MS));
+}
+
+void tzdebug_archivelog(void)
 {
 	schedule_cmd_monitor_work(&g_cmd_monitor_work_archive,
 		usecs_to_jiffies(0));
@@ -93,11 +105,9 @@ void cmd_monitor_ta_crash(int32_t type, const uint8_t *ta_uuid, uint32_t uuid_le
 	g_tee_detect_ta_crash = type;
 	if (g_tee_detect_ta_crash != TYPE_CRASH_TEE &&
 		ta_uuid != NULL && uuid_len == sizeof(struct tc_uuid)) {
-		if (memcpy_s(&g_crashed_ta_uuid, sizeof(g_crashed_ta_uuid),
-			ta_uuid, uuid_len) != EOK)
-			tloge("copy uuid failed when get ta crash\n");
-	}
-	tz_archivelog();
+		(void)memcpy_s(&g_crashed_ta_uuid, sizeof(g_crashed_ta_uuid),
+			ta_uuid, uuid_len);
+	tzdebug_archivelog();
 	fault_monitor_start(type);
 }
 
@@ -234,7 +244,7 @@ void report_imonitor(const struct tee_mem *meminfo)
 }
 #endif
 
-void memstat_report(void)
+static void memstat_report(void)
 {
 	int ret;
 	struct tee_mem *meminfo = NULL;
@@ -264,7 +274,7 @@ static void memstat_work(struct work_struct *work)
 	memstat_report();
 }
 
-void cmd_monitor_reset_context(void)
+static void cmd_monitor_reset_context(void)
 {
 	struct cmd_monitor *monitor = NULL;
 	pid_t pid = current->tgid;
@@ -338,14 +348,14 @@ static void show_timeout_cmd_info(struct cmd_monitor *monitor)
 	/* timeout to 10s, we log the teeos log, and report */
 	if ((timedif > CMD_MAX_EXECUTE_TIME * S_TO_MS) && (!monitor->is_reported)) {
 		monitor->is_reported = true;
-		tlogi("[cmd_monitor_tick] pid=%d,pname=%s,tid=%d, "
+		tloge("[cmd_monitor_tick] pid=%d,pname=%s,tid=%d, "
 			"tname=%s, lastcmdid=%u, agent call count:%d, "
 			"running with timedif=%lld ms and report\n",
 			monitor->pid, monitor->pname, monitor->tid,
 			monitor->tname, monitor->lastcmdid,
 			monitor->agent_call_count, timedif);
 		/* threads out of white table need info dump */
-		tlogi("monitor: pid-%d", monitor->pid);
+		tloge("monitor: pid-%d", monitor->pid);
 		if (!is_tui_in_use(monitor->tid)) {
 			show_cmd_bitmap();
 			g_cmd_need_archivelog = 1;
@@ -412,10 +422,6 @@ static void cmd_monitor_tickfn(struct work_struct *work)
 static void cmd_monitor_archivefn(struct work_struct *work)
 {
 	(void)(work);
-	const char crash_prefix[] = "ta crash: ";
-	const char killed_prefix[] = "ta timeout and killed: ";
-	const char crash_info_get_failed[] = "ta crash: get uuid failed";
-	char buffer[MAX_CRASH_INFO_LEN] = {0};
 
 	if (tlogger_store_msg(CONFIG_TEE_LOG_ACHIVE_PATH,
 		sizeof(CONFIG_TEE_LOG_ACHIVE_PATH)) < 0)
@@ -427,6 +433,10 @@ static void cmd_monitor_archivefn(struct work_struct *work)
 	} else if (g_tee_detect_ta_crash == TYPE_CRASH_TA ||
 		g_tee_detect_ta_crash == TYPE_KILLED_TA) {
 #ifdef CONFIG_TEE_LOG_EXCEPTION
+		const char crash_prefix[] = "ta crash: ";
+		const char killed_prefix[] = "ta timeout and killed: ";
+		const char crash_info_get_failed[] = "ta crash: get uuid failed";
+		char buffer[MAX_CRASH_INFO_LEN] = {0};
 		const char *crash_info = buffer;
 		int ret = snprintf_s(buffer, sizeof(buffer), sizeof(buffer) - 1,
 							 "%s%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
@@ -580,6 +590,8 @@ void init_cmd_monitor(void)
 		(uintptr_t)&g_cmd_monitor_work, cmd_monitor_tickfn);
 	INIT_DEFERRABLE_WORK((struct delayed_work *)
 		(uintptr_t)&g_cmd_monitor_work_archive, cmd_monitor_archivefn);
+	INIT_DEFERRABLE_WORK((struct delayed_work *)
+		(uintptr_t)&g_mem_stat, memstat_work);
 }
 
 void free_cmd_monitor(void)
@@ -596,6 +608,7 @@ void free_cmd_monitor(void)
 
 	flush_delayed_work(&g_cmd_monitor_work);
 	flush_delayed_work(&g_cmd_monitor_work_archive);
+	flush_delayed_work(&g_mem_stat);
 	if (g_cmd_monitor_wq) {
 		flush_workqueue(g_cmd_monitor_wq);
 		destroy_workqueue(g_cmd_monitor_wq);

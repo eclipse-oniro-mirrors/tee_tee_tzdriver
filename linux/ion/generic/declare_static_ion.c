@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
+ * Description: get and set static mem info.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 #include "declare_static_ion.h"
 #include <linux/of_reserved_mem.h>
 #include <linux/of.h>
@@ -42,10 +56,10 @@ static u64 g_pt_size = 0;
 
 static int reserve_pt_mem(const struct reserved_mem *rmem)
 {
-	if (rmem)
-	{
+	if (rmem) {
 		g_pt_size = rmem->size;
 		g_pt_addr = rmem->base;
+		tloge("reserve pt mem is not NULL\n");
 	} else {
 		tloge("reserve pt mem is NULL\n");
 	}
@@ -60,8 +74,7 @@ static u64 g_pp_size = 0;
 
 static int reserve_pp_mem(const struct reserved_mem *rmem)
 {
-	if (rmem)
-	{
+	if (rmem) {
 		g_pp_addr = rmem->base;
 		g_pp_size = rmem->size;
 	} else {
@@ -77,8 +90,7 @@ static u64 g_voiceid_addr = 0;
 static u64 g_voiceid_size = 0;
 static int voiceid_reserve_tee_mem(const struct reserved_mem *rmem)
 {
-	if (rmem)
-	{
+	if (rmem) {
 		g_voiceid_addr = rmem->base;
 		g_voiceid_size = rmem->size;
 	} else {
@@ -108,8 +120,7 @@ static u64 g_ion_ex_mem_addr;
 static u64 g_ion_ex_mem_size;
 static int supersonic_ex_reserve_tee_mem(const struct reserved_mem *rmem)
 {
-	if (rmem)
-	{
+	if (rmem) {
 		g_ion_ex_mem_addr = rmem->base;
 		g_ion_ex_mem_size = rmem->size;
 	} else {

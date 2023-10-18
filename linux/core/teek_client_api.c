@@ -36,6 +36,7 @@
 #include "session_manager.h"
 #include "tc_client_driver.h"
 #include "teek_app_load.h"
+#include "dynamic_ion_mem.h"
 
 static void encode_for_part_mem(struct tc_ns_client_context *context,
 	const struct teec_operation *oper, uint32_t idex, uint32_t *param_type)
@@ -313,7 +314,6 @@ uint32_t teek_check_operation(const struct teec_operation *operation)
  */
 int teek_is_agent_alive(unsigned int agent_id)
 {
-	if (!get_tz_init_flag()) return EFAULT;
 	return is_agent_alive(agent_id);
 }
 
