@@ -1,52 +1,64 @@
-# Tzdriver模块介绍<a name="ZH-CN_TOPIC_0000001078530726"></a>
+# Tzdriver组件
 
--   [简介](#section469617221261)
--   [tzdriver工程框架](#section15884114210197)
--   [二级目录结构](#section1464106163817)
+## 简介
 
-## 简介<a name="section469617221261"></a>
+Tzdriver是部署在REE侧的内核驱动，支持REE和TEE之间通信。Tzdriver处理来自于Tee Client的命令，发送指令从REE切换到TEE。Tzdriver通过管理共享内存，支持REE和TEE之间共享数据。
 
-tzdriver（Trustzone driver）是REE的一部分，REE组件提供了一套用于和TEEOS交互的富运行环境（REE）接口组件，包括驱动（tzdriver）、libteec（应用接口库）、teecd（agent服务）。本组件tzdriver一般情况下为内核的一部分，也可以编译为ko模块。
+图1 Tzdriver组件架构图
 
-## Tzdriver工程框架<a name="section15884114210197"></a>
+![](figures/tzdriver.drawio.png)
 
-tee_tzdriver：工程目录
--   README.md&README_zh.md：指导文件
--   LICENSE：许可证（GPL v2）
--   linux：为linux kernel提供的tzdriver
--   liteos：为liteos_a kernel提供的tzdriver
+## 目录
 
-## 二级目录结构<a name="section1464106163817"></a>
+```
+base/tee/tee_tzdriver
+├── core
+│   ├── cmdmonitor.c                # smc指令执行监控
+    ├── gp_ops.c                    # GP TEE规范处理逻辑
+    ├── mailbox_mempool.c           # REE和TEE共享内存管理
+    ├── session_manager.c           # CA访问TA的session管理
+    ├── smc_smp.c                   # 发送smc指令切换到TEE
+    ├── tzdebug.c                   # 调试模块
+├── tlogger                         # TEE日志驱动
+```
 
-**表 1**  tzdriver二级源代码主要目录结构
+## 配置选项
 
-<a name="table2977131081412"></a>
-<table><thead align="left"><tr id="row7977610131417"><th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.1"><p id="p18792459121314"><a name="p18792459121314"></a><a name="p18792459121314"></a>主要二级目录</p>
-</th>
-<th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.2"><p id="p77921459191317"><a name="p77921459191317"></a><a name="p77921459191317"></a>描述</p>
-</th>
-</tr>
-</thead>
-<tbody><tr id="row17977171010144"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p1836912441194"><a name="p1836912441194"></a><a name="p1836912441194"></a>core</p>
-</td>
-<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p2549609105"><a name="p2549609105"></a><a name="p2549609105"></a>核心功能代码，smc，agent等都在这里面</p>
-</td>
-</tr>
-<tr id="row6978161091412"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p64006181102"><a name="p64006181102"></a><a name="p64006181102"></a>tlogger</p>
-</td>
-<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p7456843192018"><a name="p7456843192018"></a><a name="p7456843192018"></a>日志组件相关代码</p>
-</td>
-</tr>
-<tr id="row6978201031415"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p1978910485104"><a name="p1978910485104"></a><a name="p1978910485104"></a>auth</p>
-</td>
-<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p1059035912204"><a name="p1059035912204"></a><a name="p1059035912204"></a>鉴权相关代码</p>
-</td>
-</tr>
-<tr id="row1897841071415"><td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.1 "><p id="p182586363119"><a name="p182586363119"></a><a name="p182586363119"></a>include</p>
-</td>
-<td class="cellrowborder" valign="top" width="50%" headers="mcps1.2.3.1.2 "><p id="p19278126102113"><a name="p19278126102113"></a><a name="p19278126102113"></a>头文件导出</p>
-</td>
-</tr>
-</tbody>
-</table>
+如果要使能Tzdriver驱动，需要修改linux内核代码仓中设备的defconfig文件，增加Tzdriver的配置选项：
 
+```
+#
+# TEEOS
+#
+CONFIG_TZDRIVER=y
+CONFIG_CPU_AFF_NR=1
+CONFIG_KERNEL_CLIENT=y
+CONFIG_TEELOG=y
+CONFIG_PAGES_MEM=y
+CONFIG_THIRDPARTY_COMPATIBLE=y
+```
+
+各选项其含义如下表所示：
+
+**表 1** 配置选项说明
+
+| 参数                         | 说明                                                         |
+| ---------------------------- | ------------------------------------------------------------ |
+| CONFIG_TZDRIVER              | Tzdriver模块开关                                             |
+| CONFIG_CPU_AFF_NR            | CA绑核功能，非零值代表限制仅cpuid小于CONFIG_CPU_AFF_NR的CPU可以进入TEE，0代表无限制，当前只支持在0核运行，所以值为1 |
+| CONFIG_KERNEL_CLIENT         | 支持内核CA选项                                               |
+| CONFIG_TEELOG                | TEE日志开关，默认建议开启                                    |
+| CONFIG_PAGES_MEM             | TEE日志内存管理，默认建议开启                                |
+| CONFIG_THIRDPARTY_COMPATIBLE | 兼容第三方opteed的适配，例如适配RK3568芯片需要开启此选项     |
+
+## 编译命令
+
+Tzdriver部件跟随kernel一起编译，以rk3568为例，可以单独编译boot_linux.img，编译命令如下
+
+```
+./build.sh --product-name rk3568 --ccache --build-target kernel --gn-args linux_kernel_version=\"linux-5.10\"
+```
+
+## 相关仓
+
+[tee_client](https://gitee.com/openharmony-sig/tee_tee_client)
