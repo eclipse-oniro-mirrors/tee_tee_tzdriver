@@ -22,6 +22,7 @@
 #include <linux/path.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+
 #include <linux/mm.h>
 #include <linux/dcache.h>
 #include <linux/mm_types.h>
@@ -31,7 +32,9 @@
 #if (KERNEL_VERSION(4, 14, 0) <= LINUX_VERSION_CODE)
 #include <linux/sched/mm.h>
 #endif
-
+#if defined (CONFIG_SELINUX_AUTH_ENABLE) && defined (CONFIG_SECURITY_SELINUX)
+#include <linux/security.h>
+#endif
 #include <securec.h>
 #include "tc_ns_log.h"
 #include "tc_ns_client.h"
@@ -40,7 +43,7 @@
 
 /* for crypto */
 struct crypto_shash *g_shash_handle;
-bool g_shash_handle_state;
+bool g_shash_handle_state = false;
 struct mutex g_shash_handle_lock;
 
 void init_crypto_hash_lock(void)
@@ -64,7 +67,7 @@ struct crypto_shash *get_shash_handle(void)
 	return g_shash_handle;
 }
 
-void tee_exit_shash_handle(void)
+void free_shash_handle(void)
 {
 	if (g_shash_handle) {
 		crypto_free_shash(g_shash_handle);
@@ -135,7 +138,7 @@ static int get_proc_user_pages(struct mm_struct *mm, unsigned long start_code,
 #elif (KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE)
 	return get_user_pages_remote(cur_struct, mm, start_code,
 		(unsigned long)PINED_PAGE_NUMBER, FOLL_FORCE, ptr_page, NULL, NULL);
-#elif (KERNEL_VERSION(4, 4, 197) <= LINUX_VERSION_CODE)
+#elif (KERNEL_VERSION(4, 4, 197) == LINUX_VERSION_CODE)
 	return get_user_pages_locked(cur_struct, mm, start_code,
 		(unsigned long)PINED_PAGE_NUMBER, FOLL_FORCE, ptr_page, NULL);
 #else
@@ -152,15 +155,7 @@ static int update_task_hash(struct mm_struct *mm,
 	struct page *ptr_page = NULL;
 	void *ptr_base = NULL;
 
-#if (KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE)
-	if (!mm->mmap) {
-		tloge("mm sturct error! no start_code\n");
-		return -EFAULT;
-	}
-	unsigned long start_code = mm->mmap->vm_start;
-#else
 	unsigned long start_code = mm->start_code;
-#endif
 	unsigned long end_code = mm->end_code;
 	unsigned long code_size = end_code - start_code;
 	if (code_size == 0) {
@@ -201,7 +196,7 @@ static int update_task_hash(struct mm_struct *mm,
 }
 
 int calc_task_hash(unsigned char *digest, uint32_t dig_len,
-	struct task_struct *cur_struct)
+	struct task_struct *cur_struct, uint32_t pub_key_len)
 {
 	struct mm_struct *mm = NULL;
 	struct sdesc *desc = NULL;
@@ -209,7 +204,7 @@ int calc_task_hash(unsigned char *digest, uint32_t dig_len,
 	int rc;
 
 	check_value = (!cur_struct || !digest ||
-		dig_len != SHA256_DIGEST_LENGTH);
+		dig_len != SHA256_DIGEST_LENTH);
 	if (check_value) {
 		tloge("tee hash: input param is error\n");
 		return -EFAULT;
@@ -223,8 +218,15 @@ int calc_task_hash(unsigned char *digest, uint32_t dig_len,
 		return EOK;
 	}
 
+	if (pub_key_len != sizeof(uint32_t)) {
+		tloge("apk need not check\n");
+		mmput(mm);
+		return EOK;
+	}
+
 	if (prepare_desc(&desc) != EOK) {
 		mmput(mm);
+		tloge("prepare desc failed\n");
 		return -ENOMEM;
 	}
 
@@ -250,3 +252,175 @@ free_res:
 	return rc;
 }
 /* end: Calculate the SHA256 file digest */
+
+#if defined(CONFIG_SELINUX_AUTH_ENABLE) && defined (CONFIG_SECURITY_SELINUX)
+static int check_proc_selinux_access(const char * s_ctx)
+{
+	if (s_ctx == NULL) {
+		tloge("bad params\n");
+		return CHECK_ACCESS_FAIL;
+	}
+
+	int rc;
+	u32 sid;
+	u32 tid;
+	u32 s_ctx_len = strnlen(s_ctx, MAX_SCTX_LEN);
+	if (s_ctx_len == 0 || s_ctx_len >= MAX_SCTX_LEN) {
+		tloge("invalid selinux ctx\n");
+		return CHECK_ACCESS_FAIL;
+	}
+
+	security_task_getsecid(current, &sid);
+	rc = security_secctx_to_secid(s_ctx, s_ctx_len, &tid);
+	if (rc != 0) {
+		tloge("secctx to sid failed, rc %d", rc);
+		return CHECK_ACCESS_FAIL;
+	}
+	if (sid != tid) {
+		tloge("check selinux label failed\n");
+		return CHECK_ACCESS_FAIL;
+	}
+
+	return EOK;
+}
+#else
+static int check_proc_selinux_access(const char * s_ctx)
+{
+	(void)s_ctx;
+	return 0;
+}
+#endif
+
+static int get_proc_uid(uid_t *proc_uid)
+{
+#ifdef CONFIG_LIBLINUX
+	if (current->cred == NULL) {
+		tloge("cred is NULL\n");
+		return CHECK_ACCESS_FAIL;
+	}
+	*proc_uid = current->cred->uid.val;
+#else
+	const struct cred *cred = NULL;
+	get_task_struct(current);
+	cred = koadpt_get_task_cred(current);
+	if (cred == NULL) {
+		tloge("cred is NULL\n");
+		put_task_struct(current);
+		return CHECK_ACCESS_FAIL;
+	}
+
+	*proc_uid = cred->uid.val;
+	put_cred(cred);
+	put_task_struct(current);
+#endif
+	return CHECK_ACCESS_SUCC;
+}
+
+static int check_proc_uid_path(const char *auth_ctx)
+{
+	int ret = 0;
+	char str_path_uid[MAX_PATH_SIZE] = { 0 };
+	char *pro_dpath = NULL;
+	char *k_path = NULL;
+	u32 auth_ctx_len;
+	uid_t proc_uid;
+
+	if (auth_ctx == NULL) {
+		tloge("bad params\n");
+		return CHECK_ACCESS_FAIL;
+	}
+
+	auth_ctx_len = (u32)strnlen(auth_ctx, MAX_PATH_SIZE);
+	if (auth_ctx_len == 0 || auth_ctx_len >= MAX_PATH_SIZE) {
+		tloge("invalid uid path\n");
+		return CHECK_ACCESS_FAIL;
+	}
+
+	k_path = kmalloc(MAX_PATH_SIZE, GFP_KERNEL);
+	if (ZERO_OR_NULL_PTR((unsigned long)(uintptr_t)k_path)) {
+		tloge("path kmalloc fail\n");
+		return CHECK_ACCESS_FAIL;
+	}
+
+	pro_dpath = get_proc_dpath(k_path, MAX_PATH_SIZE);
+	if (IS_ERR_OR_NULL(pro_dpath)) {
+		kfree(k_path);
+		return CHECK_ACCESS_FAIL;
+	}
+
+	ret = get_proc_uid(&proc_uid);
+	if (ret != CHECK_ACCESS_SUCC) {
+		tloge("get proc uid failed\n");
+		goto clean;
+	}
+
+	if (snprintf_s(str_path_uid, MAX_PATH_SIZE, MAX_PATH_SIZE - 1, "%s:%u",
+		pro_dpath, (unsigned int)proc_uid) < 0) {
+		tloge("snprintf_s path uid failed, ret %d\n", ret);
+		ret = CHECK_ACCESS_FAIL;
+		goto clean;
+	}
+
+	if (strnlen(str_path_uid, MAX_PATH_SIZE) != auth_ctx_len || strncmp(str_path_uid, auth_ctx, auth_ctx_len) != 0)
+		ret = ENTER_BYPASS_CHANNEL;
+	else
+		ret = CHECK_ACCESS_SUCC;
+
+clean:
+	kfree(k_path);
+	return ret;
+}
+
+#ifdef CONFIG_CADAEMON_AUTH
+int check_cadaemon_auth(void)
+{
+	int ret = check_proc_uid_path(CADAEMON_PATH_UID_AUTH_CTX);
+	if (ret != 0) {
+		tloge("check cadaemon path failed, ret %d\n", ret);
+		return ret;
+	}
+	ret = check_proc_selinux_access(SELINUX_CADAEMON_LABEL);
+	if (ret != 0) {
+		tloge("check cadaemon selinux label failed!, ret %d\n", ret);
+		return -EACCES;
+	}
+	return 0;
+}
+#endif
+
+int check_hidl_auth(void)
+{
+	int ret = check_proc_uid_path(CA_HIDL_PATH_UID_AUTH_CTX);
+	if (ret != CHECK_ACCESS_SUCC)
+		return ret;
+
+#if defined(CONFIG_SELINUX_AUTH_ENABLE) && defined (CONFIG_SECURITY_SELINUX)
+	ret = check_proc_selinux_access(SELINUX_CA_HIDL_LABEL);
+	if (ret != EOK) {
+		tloge("check hidl selinux label failed, ret %d\n", ret);
+		return CHECK_SECLABEL_FAIL;
+	}
+#endif
+
+	return CHECK_ACCESS_SUCC;
+}
+
+#ifdef CONFIG_TEECD_AUTH
+int check_teecd_auth(void)
+{
+	int ret = check_proc_uid_path(TEECD_PATH_UID_AUTH_CTX);
+	if (ret != 0) {
+		tloge("check teecd path failed, ret %d\n", ret);
+		return ret;
+	}
+
+#if defined(CONFIG_SELINUX_AUTH_ENABLE) && defined (CONFIG_SECURITY_SELINUX)
+	ret = check_proc_selinux_access(SELINUX_TEECD_LABEL);
+	if (ret != 0) {
+		tloge("check teecd selinux label failed!, ret %d\n", ret);
+		return -EACCES;
+	}
+#endif
+	return CHECK_ACCESS_SUCC;
+}
+#endif
