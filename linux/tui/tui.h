@@ -78,7 +78,7 @@ enum tui_poll_type {
 }
 
 /* tui max should be bigger than TUI_POLL_MAX in tui.h */
-static const char *const poll_event_type_name[] = { 
+static const char *const poll_event_type_name[] = {
     "config-ok",
     "config-fail",
     "tp",

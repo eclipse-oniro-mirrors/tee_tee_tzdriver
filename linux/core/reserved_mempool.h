@@ -1,21 +1,16 @@
 /*
- * reserved_mempool.h
+ * Copyright (C) 2022 Huawei Technologies Co., Ltd.
+ * Decription: reserved memory managing for sharing memory with TEE.
  *
- * reserved memory managing for sharing memory with TEE
- *
- * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
-
 #ifndef RESERVED_MEMPOOOL_H
 #define RESERVED_MEMPOOOL_H
 

@@ -1,18 +1,14 @@
 /*
- * agent.c
+ * Copyright (C) 2022 Huawei Technologies Co., Ltd.
+ * Decription: agent manager function, such as register and send cmd
  *
- * agent manager function, such as register and send cmd
- *
- * Copyright (c) 2012-2022 Huawei Technologies Co., Ltd.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
 #include "agent.h"
@@ -118,7 +114,7 @@ char *get_proc_dpath(char *path, int path_len)
 	}
 
 	rc = sprintf_s(cmdstring, MAX_PATH_SIZE, "/proc/%d/exe", current->tgid);
-	if (rc < 0){
+	if (rc < 0) {
 		tloge("set path in get proc dpath failed\n");
 		return NULL;
 	}

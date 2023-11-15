@@ -188,7 +188,7 @@ struct tc_ns_log_pool {
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 20, unsigned int)
 #define TC_NS_CLIENT_IOCTL_GET_TEE_VERSION \
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 21, unsigned int)
-#define TC_NS_CLIENT_IOCTL_UPDATE_TA_CRL\
+#define TC_NS_CLIENT_IOCTL_UPDATE_TA_CRL \
 	_IOWR(TC_NS_CLIENT_IOC_MAGIC, 22, struct tc_ns_client_crl)
 #ifdef CONFIG_LOG_POOL_ENABLE
 #define TC_NS_CLIENT_IOCTL_GET_LOG_POOL \
