@@ -503,8 +503,8 @@ error:
 
 #ifdef CONFIG_AUTH_SUPPORT_UNAME
 #define PASSWD_FILE "/etc/passwd"
-#define UID_POS     2U
-#define DECIMAL 10
+#define UID_POS	 2U
+#define DECIMAL  10
 static int uid_compare(uint32_t uid, const char* uid_str, uint32_t uid_len)
 {
 	uint32_t uid_num = 0;

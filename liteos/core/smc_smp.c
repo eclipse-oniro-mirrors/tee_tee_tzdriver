@@ -27,25 +27,25 @@
 #include "cmdmonitor.h"
 #include "tlogger.h"
 
-#define SECS_SUSPEND_STATUS      0xA5A5
-#define PREEMPT_COUNT            10000
-#define HZ_COUNT                 10
-#define IDLED_COUNT              100
+#define SECS_SUSPEND_STATUS	  	0xA5A5
+#define PREEMPT_COUNT			10000
+#define HZ_COUNT				10
+#define IDLED_COUNT			  	100
 /*
  * when cannot find smc entry, will sleep 1ms
  * because the task will be killed in 25s if it not return,
  * so the retry count is 25s/1ms
  */
-#define MAX_EMPTY_RUNS		   100
-#define TZ_CPU_ZERO	0
-#define TZ_CPU_ONE	 1
-#define TZ_CPU_FOUR	4
-#define TZ_CPU_FIVE	5
-#define TZ_CPU_SIX	 6
+#define MAX_EMPTY_RUNS		   	100
+#define TZ_CPU_ZERO	   0
+#define TZ_CPU_ONE	   1
+#define TZ_CPU_FOUR	   4
+#define TZ_CPU_FIVE	   5
+#define TZ_CPU_SIX	   6
 #define TZ_CPU_SEVEN   7
-#define LOW_BYTE    0xF
+#define LOW_BYTE	   0xF
 
-#define PENDING2_RETRY      (-1)
+#define PENDING2_RETRY	  (-1)
 
 #define MAX_CHAR 0xff
 
@@ -100,15 +100,15 @@ enum {
 enum smc_ops_exit {
 	SMC_OPS_NORMAL   = 0x0,
 	SMC_OPS_SCHEDTO  = 0x1,
-	SMC_OPS_START_SHADOW    = 0x2,
-	SMC_OPS_START_FIQSHD    = 0x3,
-	SMC_OPS_PROBE_ALIVE     = 0x4,
-	SMC_OPS_ABORT_TASK      = 0x5,
-	SMC_EXIT_NORMAL         = 0x0,
-	SMC_EXIT_PREEMPTED      = 0x1,
-	SMC_EXIT_SHADOW         = 0x2,
-	SMC_EXIT_ABORT          = 0x3,
-	SMC_EXIT_MAX            = 0x4,
+	SMC_OPS_START_SHADOW	= 0x2,
+	SMC_OPS_START_FIQSHD	= 0x3,
+	SMC_OPS_PROBE_ALIVE	 = 0x4,
+	SMC_OPS_ABORT_TASK	  = 0x5,
+	SMC_EXIT_NORMAL		 = 0x0,
+	SMC_EXIT_PREEMPTED	  = 0x1,
+	SMC_EXIT_SHADOW		 = 0x2,
+	SMC_EXIT_ABORT		  = 0x3,
+	SMC_EXIT_MAX			= 0x4,
 };
 
 #define SYM_NAME_LEN_MAX 16
@@ -614,7 +614,7 @@ static int do_smp_smc_send(struct smc_param *param)
 			"mov r2, %[a2]\n"
 			"mov r3, %[a3]\n"
 			".arch_extension sec\n"
-			"smc    #0\n"
+			"smc	#0\n"
 			"str r0, [%[re0]]\n"
 			"str r1, [%[re1]]\n"
 			"str r2, [%[re2]]\n"
@@ -1147,9 +1147,9 @@ static void print_crash_msg(union crash_inf *crash_info)
 			crash_info->crash_msg.sym_name_append, SYM_NAME_LEN_2))
 			tloge("memcpy sym_name_append failed!\n");
 		tloge("====crash app:%s user_sym:%s + <0x%x/0x%x>\n",
-		      crash_app_name, syms, off, crash_info->crash_msg.size);
+			  crash_app_name, syms, off, crash_info->crash_msg.size);
 		tloge("====crash far:0x%x fault:%x\n",
-		      crash_info->crash_msg.far, crash_info->crash_msg.fault);
+			  crash_info->crash_msg.far, crash_info->crash_msg.fault);
 	}
 }
 

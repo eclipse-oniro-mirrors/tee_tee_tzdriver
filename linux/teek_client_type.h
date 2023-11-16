@@ -88,13 +88,13 @@ struct teec_tui_parameter {
 	/* tui event type */
 	uint32_t value;
 	/* return value, is keycode if tui event is getkeycode */
-	uint32_t notch;  /* notch size of phone */
-	uint32_t width;  /* width of foldable screen */
-	uint32_t height; /* height of foldable screen */
-	uint32_t fold_state;    /* state of foldable screen */
+	uint32_t notch;  		/* notch size of phone */
+	uint32_t width;  		/* width of foldable screen */
+	uint32_t height; 		/* height of foldable screen */
+	uint32_t fold_state;	/* state of foldable screen */
 	uint32_t display_state; /* one state of folded state */
-	uint32_t phy_width;     /* real width of the mobile */
-	uint32_t phy_height;    /* real height of the mobile */
+	uint32_t phy_width;	 	/* real width of the mobile */
+	uint32_t phy_height;	/* real height of the mobile */
 };
 
 struct teec_operation {

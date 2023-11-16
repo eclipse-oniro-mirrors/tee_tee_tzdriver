@@ -58,13 +58,13 @@
 #include "auth_base_impl.h"
 
 #ifdef CONFIG_CMS_CAHASH_AUTH
-#define HASH_FILE_MAX_SIZE         CONFIG_HASH_FILE_SIZE
+#define HASH_FILE_MAX_SIZE		 CONFIG_HASH_FILE_SIZE
 #else
-#define HASH_FILE_MAX_SIZE         (16 * 1024)
+#define HASH_FILE_MAX_SIZE		 (16 * 1024)
 #endif
-#define AGENT_BUFF_SIZE            (4 * 1024)
-#define AGENT_MAX                  32
-#define PAGE_ORDER_RATIO           2
+#define AGENT_BUFF_SIZE			 (4 * 1024)
+#define AGENT_MAX				 32
+#define PAGE_ORDER_RATIO		  2
 
 static struct list_head g_tee_agent_list;
 
@@ -214,7 +214,7 @@ static int get_ca_path_and_uid(struct ca_info *ca)
 
 	ca->uid = cred->uid.val;
 	tlogd("ca_task->comm is %s, path is %s, ca uid is %u\n",
-	      current->comm, path, cred->uid.val);
+		  current->comm, path, cred->uid.val);
 
 	put_cred(cred);
 	put_task_struct(current);
@@ -556,7 +556,7 @@ int agent_process_work(const struct tc_ns_smc_cmd *smc_cmd,
 	tlogd("agent process work: wakeup the agent");
 	wake_up(&event_data->wait_event_wq);
 	tlogd("agent 0x%x request, goto sleep, pe->run=%d\n",
-	      agent_id, atomic_read(&event_data->ca_run));
+		  agent_id, atomic_read(&event_data->ca_run));
 
 	ret = wait_agent_response(event_data);
 	atomic_set(&event_data->ca_run, 0);

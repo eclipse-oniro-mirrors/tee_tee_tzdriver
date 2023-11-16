@@ -102,7 +102,7 @@ static int get_pack_name_len(struct tc_ns_dev_file *dev_file,
 		return -EFAULT;
 
 	if (!dev_file->pkg_name_len ||
-	    dev_file->pkg_name_len >= MAX_PACKAGE_NAME_LEN) {
+		dev_file->pkg_name_len >= MAX_PACKAGE_NAME_LEN) {
 		tloge("invalid pack name len: %u\n", dev_file->pkg_name_len);
 		return -EINVAL;
 	}

@@ -29,26 +29,26 @@
 #include "los_adapt.h"
 
 /* for log item ----------------------------------- */
-#define LOG_ITEM_MAGIC          0x5A5A
-#define LOG_ITEM_LEN_ALIGN      64
-#define LOG_ITEM_MAX_LEN        1024
+#define LOG_ITEM_MAGIC		  	0x5A5A
+#define LOG_ITEM_LEN_ALIGN	  	64
+#define LOG_ITEM_MAX_LEN		1024
 #define LOG_READ_STATUS_ERROR   0x000FFFF
 
 /* =================================================== */
-#define LOGGER_LOG_TEEOS        "teelog" /* tee os log */
-#define TLOGCAT_DEV_NAME        "/dev/teelog"
-#define __TEELOGGERIO           0xBE /* for ioctl */
+#define LOGGER_LOG_TEEOS		"teelog" /* tee os log */
+#define TLOGCAT_DEV_NAME		"/dev/teelog"
+#define __TEELOGGERIO		   	0xBE /* for ioctl */
 
 #define DUMP_START_MAGIC "Dump SPI notification"
 #define DUMP_END_MAGIC "Dump task states END"
 
-#define GET_VERSION_BASE       5
+#define GET_VERSION_BASE	   5
 #define SET_READERPOS_CUR_BASE 6
 #define SET_TLOGCAT_STAT_BASE  7
 #define GET_TLOGCAT_STAT_BASE  8
 
 /* get tee verison */
-#define MAX_TEE_VERSION_LEN     256
+#define MAX_TEE_VERSION_LEN	   256
 #define TEELOGGER_GET_VERSION \
 	_IOR(__TEELOGGERIO, GET_VERSION_BASE, char[MAX_TEE_VERSION_LEN])
 /* set the log reader pos to current pos */
@@ -88,17 +88,17 @@ struct log_item {
 };
 
 /* --- for log mem --------------------------------- */
-#define TEMP_LOG_MEM_SIZE          (10 * SZ_1K)
+#define TEMP_LOG_MEM_SIZE		  (10 * SZ_1K)
 
-#define LOG_BUFFER_RESERVED_LEN    11U
-#define VERSION_INFO_LEN           156U
+#define LOG_BUFFER_RESERVED_LEN	  11U
+#define VERSION_INFO_LEN		  156U
 
 /*
  * Log's buffer flag info, size: 64 bytes head + 156 bytes's version info.
  * For filed description:
  * last_pos : current log's end position, last log's start position.
  * write_loops: Write cyclically. Init value is 0, when memory is used
- *              up, the value add 1.
+ *			    up, the value add 1.
  */
 struct log_buffer_flag {
 	uint32_t reserved0;
@@ -280,7 +280,7 @@ static ssize_t get_buffer_info(struct tlogger_reader *reader,
 	return 0;
 }
 
-#define LOG_BUFFER_MAX_LEN      0x100000
+#define LOG_BUFFER_MAX_LEN	  0x100000
 
 static ssize_t get_last_read_pos(struct log_buffer_flag *log_flag,
 	struct tlogger_reader *reader, uint32_t *log_last_pos, uint32_t *is_read)
@@ -793,7 +793,7 @@ static struct log_item *msg_get_next(const unsigned char *buffer_start,
 	return NULL;
 }
 
-#define OPEN_FILE_MODE          0640U
+#define OPEN_FILE_MODE		0640U
 
 static int write_version_to_msg(int filep)
 {

@@ -16,15 +16,15 @@
 
 #include <linux/types.h>
 
-#define OPEN_FILE_MODE          0640U
-#define ROOT_UID                0
-#define ROOT_GID                0
-#define SYSTEM_GID              1000
+#define OPEN_FILE_MODE		  0640U
+#define ROOT_UID			  0
+#define ROOT_GID			  0
+#define SYSTEM_GID			  1000
 #ifdef LAST_TEE_MSG_ROOT_GID
-#define FILE_CHOWN_GID                0
+#define FILE_CHOWN_GID		  0
 #else
 /* system gid for last_teemsg file sys chown */
-#define FILE_CHOWN_GID                1000
+#define FILE_CHOWN_GID		  1000
 #endif
 
 #define UINT64_MAX (uint64_t)(~((uint64_t)0)) /* 0xFFFFFFFFFFFFFFFF */

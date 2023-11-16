@@ -22,11 +22,11 @@
 #include "tc_ns_log.h"
 #include "smc_call.h"
 
-#define S4_ADDR_4G              0xffffffff
-#define RESERVED_SECOS_PHYMEM_BASE                  0x22800000
-#define RESERVED_SECOS_PHYMEM_SIZE                  (0x3000000)
-#define RESERVED_SECOS_S4_BASE                      0x27760000
-#define RESERVED_SECOS_S4_SIZE                      (0x100000)
+#define S4_ADDR_4G			  				0xffffffff
+#define RESERVED_SECOS_PHYMEM_BASE			0x22800000
+#define RESERVED_SECOS_PHYMEM_SIZE			(0x3000000)
+#define RESERVED_SECOS_S4_BASE				0x27760000
+#define RESERVED_SECOS_S4_SIZE				(0x100000)
 
 static char *g_s4_kernel_mem_addr;
 static char *g_s4_buffer_vaddr;

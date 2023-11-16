@@ -34,11 +34,11 @@ LosTaskCB *kthread_run(int (*threadfn)(uintptr_t data, int data_len), void *data
 
 	task_init_param.pfnTaskEntry = (TSK_ENTRY_FUNC)threadfn;
 	task_init_param.uwStackSize  = LOSCFG_BASE_CORE_TSK_DEFAULT_STACK_SIZE;
-	task_init_param.pcName	     = name;
+	task_init_param.pcName		 = name;
 	task_init_param.usTaskPrio   = 1;
 	task_init_param.auwArgs[0]   = (uintptr_t)data;
 	task_init_param.auwArgs[1]   = data_len;
-	task_init_param.uwResved     = LOS_TASK_STATUS_DETACHED;
+	task_init_param.uwResved	 = LOS_TASK_STATUS_DETACHED;
 
 	ret = LOS_TaskCreate(&task_id, &task_init_param);
 	if (ret != LOS_OK)

@@ -19,8 +19,8 @@
 #define TZ_PM_H
 #include <linux/platform_device.h>
 
-#define TSP_S4_SUSPEND          0xB200000C
-#define TSP_S4_RESUME           0xB200000D
+#define TSP_S4_SUSPEND		    0xB200000C
+#define TSP_S4_RESUME		    0xB200000D
 #define TSP_S4_ENCRYPT_AND_COPY 0xB2000010
 #define TSP_S4_DECRYPT_AND_COPY 0xB2000011
 

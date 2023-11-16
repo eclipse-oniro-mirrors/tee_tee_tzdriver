@@ -350,7 +350,7 @@ EXPORT_SYMBOL(teek_initialize_context);
  */
 void teek_finalize_context(struct teec_context *context)
 {
-    if (!get_tz_init_flag()) return;
+	if (!get_tz_init_flag()) return;
 	tlogd("teek_finalize_context started\n");
 	if (!context || !context->dev) {
 		tloge("context or dev is null, not correct\n");

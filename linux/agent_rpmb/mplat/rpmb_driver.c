@@ -36,7 +36,7 @@
 #define IOC_CMD_1				 1
 #define IOC_CMD_2				 2
 #define STORAGE_IOC_MAX_RPMB_CMD 3
-#define RPMB_EMMC_CID_SIZE	     32
+#define RPMB_EMMC_CID_SIZE		 32
 #define RPMB_CTRL_MAGIC		  	 0x5A5A5A5A
 #define RPMB_REQ				 1		  /* RPMB request mark */
 #define RPMB_RESP				 (1 << 1) /* RPMB response mark*/

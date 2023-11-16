@@ -23,13 +23,13 @@
 #ifndef CONFIG_TEE_FAULT_MANAGER
 static inline void fault_monitor_start(int32_t type)
 {
-    (void)type;
-    return;
+	(void)type;
+	return;
 }
 
 static inline void fault_monitor_end(void)
 {
-    return;
+	return;
 }
 #endif
 
@@ -42,14 +42,14 @@ static inline void init_kthread_cpumask(void)
 
 static inline void tz_kthread_bind_mask(struct task_struct *kthread)
 {
-    (void)kthread;
+	(void)kthread;
 }
 
 static inline void tz_workqueue_bing_mask(struct workqueue_struct *wq, 
-    uint32_t flag)
+	uint32_t flag)
 {
-    (void)wq;
-    (void)flag;
+	(void)wq;
+	(void)flag;
 }
 
 #ifdef CONFIG_LINEPATCH_ENABLE
@@ -57,8 +57,8 @@ static inline void tz_workqueue_bing_mask(struct workqueue_struct *wq,
 #else
 static inline int livepatch_init(const struct device *dev)
 {
-    (void)dev;
-    return 0;
+	(void)dev;
+	return 0;
 }
 static inline void livepatch_down_read_sem(void)
 {
@@ -77,8 +77,8 @@ static inline void free_livepatch(void)
 #else
 static inline void tee_trace_add_event(enum tee_event_id id, uint64_t add_info)
 {
-    (void)id;
-    (void)add_info;
+	(void)id;
+	(void)add_info;
 }
 static inline void free_event_mem(void)
 {
@@ -93,18 +93,18 @@ static inline void free_interrupt_trace(void)
 #else
 static inline bool is_tee_rebooting(void)
 {
-    return false;
+	return false;
 }
 static inline int tee_init_reboot_thread(void)
 {
-    return 0;
+	return 0;
 }
 static inline int tee_wake_up_reboot(void)
 {
-    return 0;
+	return 0;
 }
 static inline void free_reboot_thread(void)
 {
-    return;
+	return;
 }
 #endif
