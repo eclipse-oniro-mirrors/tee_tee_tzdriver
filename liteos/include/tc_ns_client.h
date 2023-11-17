@@ -20,9 +20,9 @@
 #include "teek_client_type.h"
 #include "los_adapt.h"
 
-#define UUID_LEN                16
-#define PARAM_NUM               4
-#define ADDR_TRANS_NUM          32
+#define UUID_LEN			   16
+#define PARAM_NUM			   4
+#define ADDR_TRANS_NUM		   32
 
 #define teec_param_types(param0_type, param1_type, param2_type, param3_type) \
 	((param3_type) << 12 | (param2_type) << 8 | \

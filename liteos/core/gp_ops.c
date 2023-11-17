@@ -27,7 +27,7 @@
 #include "tlogger.h"
 #include "los_adapt.h"
 
-#define MAX_SHARED_SIZE 0x100000      /* 1 MiB */
+#define MAX_SHARED_SIZE 0x100000	  /* 1 MiB */
 
 static void free_operation(const struct tc_call_params *call_params,
 	struct tc_op_params *op_params);
@@ -281,7 +281,7 @@ int write_to_client(void __user *dest, size_t dest_size,
 		ret = memcpy_s(dest, dest_size, src, size);
 		if (ret != EOK) {
 			tloge("write to client fail. line=%d, ret=%d\n",
-			      __LINE__, ret);
+				  __LINE__, ret);
 			return ret;
 		}
 		return ret;

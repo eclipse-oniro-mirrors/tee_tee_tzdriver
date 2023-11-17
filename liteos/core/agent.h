@@ -18,17 +18,17 @@
 #define AGENT_H
 #include "teek_ns_client.h"
 
-#define MAX_PATH_SIZE         512
-#define AGENT_FS_ID           0x46536673 /* FSfs */
-#define AGENT_MISC_ID         0x4d495343 /* MISC */
+#define MAX_PATH_SIZE	      512
+#define AGENT_FS_ID		   	  0x46536673 /* FSfs */
+#define AGENT_MISC_ID		  0x4d495343 /* MISC */
 
-#define AGENT_SOCKET_ID       0x69e85664 /* socket */
+#define AGENT_SOCKET_ID	   	  0x69e85664 /* socket */
 #define SECFILE_LOAD_AGENT_ID 0x4c4f4144 /* SECFILE-LOAD-AGENT */
 #define TEE_SECE_AGENT_ID   0x53656345 /* npu agent id */
 #define TEE_FACE_AGENT1_ID  0x46616365 /* face agent id */
 #define TEE_FACE_AGENT2_ID  0x46616345 /* face agent id */
 #define TEE_VLTMM_AGENT_ID  0x564c544d /* vltmm agent id */
-#define SYSTEM_UID          1000
+#define SYSTEM_UID		  1000
 
 enum agent_state_type {
 	AGENT_CRASHED = 0,

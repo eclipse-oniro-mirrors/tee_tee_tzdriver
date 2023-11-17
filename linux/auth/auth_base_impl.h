@@ -45,17 +45,17 @@
 #include <linux/err.h>
 #include <crypto/hash.h>
 
-#define CHECK_ACCESS_SUCC      0
-#define CHECK_ACCESS_FAIL      0xffff
+#define CHECK_ACCESS_SUCC	   0
+#define CHECK_ACCESS_FAIL	   0xffff
 #define CHECK_PATH_HASH_FAIL   0xff01
-#define CHECK_SECLABEL_FAIL    0xff02
+#define CHECK_SECLABEL_FAIL	   0xff02
 #define CHECK_CODE_HASH_FAIL   0xff03
 #define ENTER_BYPASS_CHANNEL   0xff04
 
-#define BUF_MAX_SIZE           1024
-#define MAX_PATH_SIZE          512
-#define SHA256_DIGEST_LENTH    32
-#define MAX_SCTX_LEN           128
+#define BUF_MAX_SIZE		   1024
+#define MAX_PATH_SIZE		   512
+#define SHA256_DIGEST_LENTH	   32
+#define MAX_SCTX_LEN		   128
 
 struct sdesc {
 	struct shash_desc shash;

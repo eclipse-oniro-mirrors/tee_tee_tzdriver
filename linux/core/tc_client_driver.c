@@ -1140,8 +1140,8 @@ const struct dev_pm_ops g_tzdriver_pm_ops = {
 
 static struct platform_driver g_tz_platform_driver = {
 	.driver = {
-		.name             = "trusted_core",
-		.owner            = THIS_MODULE,
+		.name		= "trusted_core",
+		.owner		= THIS_MODULE,
 #ifdef CONFIG_ACPI
 		.acpi_match_table = ACPI_PTR(g_tzdriver_acpi_match),
 #else

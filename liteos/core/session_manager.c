@@ -356,7 +356,7 @@ static int set_login_information(struct tc_ns_dev_file *dev_file,
 		if (memcpy_s(dev_file->pub_key, MAX_PUBKEY_LEN, &ca_uid,
 			dev_file->pub_key_len)) {
 			tloge("failed to copy pubkey, pub key len=%u\n",
-			      dev_file->pub_key_len);
+				  dev_file->pub_key_len);
 			goto error;
 		}
 		context->params[2].memref.buffer =

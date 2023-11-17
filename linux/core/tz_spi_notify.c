@@ -231,8 +231,8 @@ static int find_notify_sess(
 	mutex_lock(&dev_list->dev_lock);
 	list_for_each_entry(temp_dev_file, &dev_list->dev_file_list, head) {
 		tlogd("dev file id1 = %u, id2 = %u\n",
-		      temp_dev_file->dev_file_id,
-		      tc_notify_data_timer->dev_file_id);
+			  temp_dev_file->dev_file_id,
+			  tc_notify_data_timer->dev_file_id);
 		if (temp_dev_file->dev_file_id ==
 			tc_notify_data_timer->dev_file_id) {
 			mutex_lock(&temp_dev_file->service_lock);
@@ -276,8 +276,8 @@ static void tc_notify_timer_fn(struct notify_data_entry *notify_data_entry)
 	tc_notify_data_timer = &(notify_data_entry->context.timer);
 	notify_data_entry->filled = 0;
 	tlogd("notify data timer type is 0x%x, timer ID is 0x%x\n",
-	      tc_notify_data_timer->property.type,
-	      tc_notify_data_timer->property.timer_id);
+		  tc_notify_data_timer->property.type,
+		  tc_notify_data_timer->property.timer_id);
 	walk_callback_list(tc_notify_data_timer);
 
 	if (find_notify_sess(tc_notify_data_timer, &temp_ses, &enc_found) != 0)
@@ -703,7 +703,7 @@ int tz_spi_init(struct device *class_dev, struct device_node *np)
 		g_notify_data_entry_shadow =
 			&g_notify_data->entry[NOTIFY_DATA_ENTRY_SHADOW - 1];
 		tlogd("target is: %llx\n",
-		      g_notify_data_entry_shadow->context.shadow.target_tcb);
+			  g_notify_data_entry_shadow->context.shadow.target_tcb);
 	}
 
 	return 0;

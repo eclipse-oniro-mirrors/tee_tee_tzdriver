@@ -55,29 +55,29 @@ struct pending_entry {
 #ifdef DIV_ROUND_UP
 #undef DIV_ROUND_UP
 #endif
-#define DIV_ROUND_UP(n, d)              (((n) + (d) - 1) / (d))
+#define DIV_ROUND_UP(n, d)			(((n) + (d) - 1) / (d))
 
-#define BITS_PER_BYTE                   8
+#define BITS_PER_BYTE				8
 
 #ifdef BITS_TO_LONGS
 #undef BITS_TO_LONGS
 #endif
-#define BITS_TO_LONGS(nr)               DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(uint64_t))
+#define BITS_TO_LONGS(nr)			DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(uint64_t))
 
 #ifdef BIT_MASK
 #undef BIT_MASK
 #endif
-#define BIT_MASK(nr)                    (1UL << (((uint64_t)(nr)) % sizeof(uint64_t)))
+#define BIT_MASK(nr)				(1UL << (((uint64_t)(nr)) % sizeof(uint64_t)))
 
 #ifdef BIT_WORD
 #undef BIT_WORD
 #endif
-#define BIT_WORD(nr)                    ((nr) / sizeof(uint64_t))
+#define BIT_WORD(nr)				((nr) / sizeof(uint64_t))
 
 #ifdef DECLARE_BITMAP
 #undef DECLARE_BITMAP
 #endif
-#define DECLARE_BITMAP(name, bits)      uint64_t name[BITS_TO_LONGS(bits)]
+#define DECLARE_BITMAP(name, bits)	uint64_t name[BITS_TO_LONGS(bits)]
 
 #define SIQ_DUMP_TIMEOUT 1U
 #define SIQ_DUMP_SHELL   2U

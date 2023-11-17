@@ -333,7 +333,7 @@ int tc_ns_load_secfile(struct tc_ns_dev_file *dev_file,
 	}
 
 	if (ioctl_arg.sec_file_info.secfile_type >= LOAD_TYPE_MAX ||
-	    ioctl_arg.sec_file_info.secfile_type == LOAD_PATCH) {
+		ioctl_arg.sec_file_info.secfile_type == LOAD_PATCH) {
 		tloge("invalid secfile type: %d!", ioctl_arg.sec_file_info.secfile_type);
 		return -EINVAL;
 	}

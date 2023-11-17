@@ -26,10 +26,10 @@
 #include "los_adapt.h"
 #include "cmdmonitor.h"
 
-#define HASH_FILE_MAX_SIZE         (16 * 1024)
-#define AGENT_BUFF_SIZE            (4 * 1024)
-#define AGENT_MAX                  32
-#define PAGE_ORDER_RATIO           2
+#define HASH_FILE_MAX_SIZE		(16 * 1024)
+#define AGENT_BUFF_SIZE			(4 * 1024)
+#define AGENT_MAX				32
+#define PAGE_ORDER_RATIO		2
 
 static struct list_head g_tee_agent_list;
 

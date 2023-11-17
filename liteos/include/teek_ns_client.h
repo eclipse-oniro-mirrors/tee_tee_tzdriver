@@ -25,29 +25,29 @@
 #include "los_adapt.h"
 
 #define TC_NS_CLIENT_IOC_MAGIC  't'
-#define TC_NS_CLIENT_DEV        "tc_ns_client"
+#define TC_NS_CLIENT_DEV		"tc_ns_client"
 #define TC_NS_CLIENT_DEV_NAME   "/dev/tc_ns_client"
-#define TC_PRIVATE_DEV_NAME   "/dev/tc_private"
+#define TC_PRIVATE_DEV_NAME   	"/dev/tc_private"
 
 #define EXCEPTION_MEM_SIZE (8*1024) /* mem for exception handling */
-#define TSP_REQUEST        0xB2000008
-#define TSP_RESPONSE       0xB2000009
-#define TSP_REE_SIQ        0xB200000A
-#define TSP_CRASH          0xB200000B
-#define TSP_PREEMPTED      0xB2000005
-#define TC_CALL_GLOBAL     0x01
-#define TC_CALL_SYNC       0x02
-#define TC_CALL_LOGIN            0x04
+#define TSP_REQUEST			0xB2000008
+#define TSP_RESPONSE	    0xB2000009
+#define TSP_REE_SIQ			0xB200000A
+#define TSP_CRASH		  	0xB200000B
+#define TSP_PREEMPTED	  	0xB2000005
+#define TC_CALL_GLOBAL	 	0x01
+#define TC_CALL_SYNC	   	0x02
+#define TC_CALL_LOGIN		 	 0x04
 #define TEE_REQ_FROM_USER_MODE   0U
 #define TEE_REQ_FROM_KERNEL_MODE 1U
-#define TEE_PARAM_NUM            4
+#define TEE_PARAM_NUM			 4
 
 /* Max sizes for login info buffer comming from teecd */
-#define MAX_PACKAGE_NAME_LEN 255
+#define MAX_PACKAGE_NAME_LEN 	 255
 /* The apk certificate format is as follows:
-  * modulus_size(4 bytes) + modulus buffer(512 bytes)
-  * + exponent size(4 bytes) + exponent buffer(1 bytes)
-  */
+ * modulus_size(4 bytes) + modulus buffer(512 bytes)
+ * + exponent size(4 bytes) + exponent buffer(1 bytes)
+ */
 #define MAX_PUBKEY_LEN 1024
 
 struct tc_ns_dev_list {
@@ -124,7 +124,7 @@ struct tc_ns_login {
 struct tc_ns_operation {
 	unsigned int paramtypes;
 	union tc_ns_parameter params[TEE_PARAM_NUM];
-	unsigned int    buffer_h_addr[TEE_PARAM_NUM];
+	unsigned int	buffer_h_addr[TEE_PARAM_NUM];
 	struct tc_ns_shared_mem *sharemem[TEE_PARAM_NUM];
 	void *mb_buffer[TEE_PARAM_NUM];
 };
@@ -143,7 +143,7 @@ enum smc_cmd_type {
 };
 
 struct tc_ns_smc_cmd {
-	uint8_t      uuid[sizeof(struct tc_uuid)];
+	uint8_t	  uuid[sizeof(struct tc_uuid)];
 	unsigned int cmd_type;
 	unsigned int cmd_id;
 	unsigned int dev_file_id;
@@ -156,7 +156,7 @@ struct tc_ns_smc_cmd {
 	unsigned int login_data_h_addr;
 	unsigned int login_data_len;
 	unsigned int err_origin;
-	int          ret_val;
+	int		  ret_val;
 	unsigned int event_nr;
 	unsigned int uid;
 	unsigned int ca_pid; /* pid */

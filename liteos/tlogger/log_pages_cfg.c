@@ -120,13 +120,13 @@ void unmap_log_mem(int *log_buffer)
 		get_order(PAGES_LOG_MEM_LEN));
 }
 
-#define ROOT_UID                      0
+#define ROOT_UID				0
 
 #ifdef LAST_TEE_MSG_ROOT_GID
-#define FILE_CHOWN_GID                0
+#define FILE_CHOWN_GID			0
 #else
 /* system gid for last_teemsg file sys chown */
-#define FILE_CHOWN_GID                1000
+#define FILE_CHOWN_GID			1000
 #endif
 
 void get_log_chown(uid_t *user, gid_t *group)

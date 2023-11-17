@@ -78,9 +78,9 @@
 #endif
 #include "smc_call.h"
 
-#define PREEMPT_COUNT            10000
-#define HZ_COUNT                 10
-#define IDLED_COUNT              100
+#define PREEMPT_COUNT		10000
+#define HZ_COUNT			10
+#define IDLED_COUNT			100
 /*
  * when cannot find smc entry, will sleep 1ms
  * because the task will be killed in 25s if it not return,
@@ -89,17 +89,17 @@
 #define FIND_SMC_ENTRY_SLEEP 1
 #define FIND_SMC_ENTRY_RETRY_MAX_COUNT (CMD_MAX_EXECUTE_TIME * S_TO_MS / FIND_SMC_ENTRY_SLEEP)
 
-#define CPU_ZERO    0
-#define CPU_ONE     1
-#define CPU_FOUR    4
-#define CPU_FIVE    5
-#define CPU_SIX     6
+#define CPU_ZERO	0
+#define CPU_ONE	 	1
+#define CPU_FOUR	4
+#define CPU_FIVE	5
+#define CPU_SIX	 	6
 #define CPU_SEVEN   7
-#define LOW_BYTE    0xF
+#define LOW_BYTE	0xF
 
-#define PENDING2_RETRY      (-1)
+#define PENDING2_RETRY	  (-1)
 
-#define RETRY_WITH_PM     1
+#define RETRY_WITH_PM	  1
 #define CLEAN_WITHOUT_PM  2
 
 #define MAX_CHAR 0xff
@@ -122,8 +122,8 @@ static struct task_struct *g_ipi_helper_thread;
 static DEFINE_KTHREAD_WORKER(g_ipi_helper_worker);
 
 enum cmd_reuse {
-	CLEAR,      /* clear this cmd index */
-	RESEND,     /* use this cmd index resend */
+	CLEAR,	  /* clear this cmd index */
+	RESEND,	  /* use this cmd index resend */
 };
 
 struct cmd_reuse_info {
@@ -155,20 +155,20 @@ static uint32_t g_siq_queue[MAX_SIQ_NUM];
 DEFINE_MUTEX(g_siq_lock);
 
 enum smc_ops_exit {
-	SMC_OPS_NORMAL   = 0x0,
-	SMC_OPS_SCHEDTO  = 0x1,
-	SMC_OPS_START_SHADOW    = 0x2,
-	SMC_OPS_START_FIQSHD    = 0x3,
-	SMC_OPS_PROBE_ALIVE     = 0x4,
-	SMC_OPS_ABORT_TASK      = 0x5,
-	SMC_EXIT_NORMAL         = 0x0,
-	SMC_EXIT_PREEMPTED      = 0x1,
-	SMC_EXIT_SHADOW         = 0x2,
-	SMC_EXIT_ABORT          = 0x3,
-	SMC_EXIT_MAX            = 0x4,
+	SMC_OPS_NORMAL   		= 0x0,
+	SMC_OPS_SCHEDTO     	= 0x1,
+	SMC_OPS_START_SHADOW	= 0x2,
+	SMC_OPS_START_FIQSHD	= 0x3,
+	SMC_OPS_PROBE_ALIVE	    = 0x4,
+	SMC_OPS_ABORT_TASK	    = 0x5,
+	SMC_EXIT_NORMAL		    = 0x0,
+	SMC_EXIT_PREEMPTED	    = 0x1,
+	SMC_EXIT_SHADOW		    = 0x2,
+	SMC_EXIT_ABORT		    = 0x3,
+	SMC_EXIT_MAX			= 0x4,
 };
 
-#define SHADOW_EXIT_RUN             0x1234dead
+#define SHADOW_EXIT_RUN			 	0x1234dead
 #define SMC_EXIT_TARGET_SHADOW_EXIT 0x1
 
 #define SYM_NAME_LEN_MAX 16
@@ -925,10 +925,10 @@ static int siq_thread_fn(void *arg)
 }
 
 #ifdef CONFIG_TEE_AUDIT
-#define MAX_UPLOAD_INFO_LEN      4
-#define INFO_HIGH_OFFSET         24U
-#define INFO_MID_OFFSET          16U
-#define INFO_LOW_OFFSET          8U
+#define MAX_UPLOAD_INFO_LEN	  4
+#define INFO_HIGH_OFFSET	  24U
+#define INFO_MID_OFFSET		  16U
+#define INFO_LOW_OFFSET		  8U
 
 static void upload_audit_event(unsigned int eventindex)
 {
@@ -1418,9 +1418,9 @@ static void print_crash_msg(union crash_inf *crash_info)
 			crash_info->crash_msg.sym_name_append, SYM_NAME_LEN_2) != EOK)
 			tloge("memcpy sym_name_append failed!\n");
 		tloge("====crash app:%s user_sym:%s + <0x%x/0x%x>\n",
-		      crash_app_name, syms, off, crash_info->crash_msg.size);
+			  crash_app_name, syms, off, crash_info->crash_msg.size);
 		tloge("====crash far:0x%x fault:%x\n",
-		      crash_info->crash_msg.far, crash_info->crash_msg.fault);
+			  crash_info->crash_msg.far, crash_info->crash_msg.fault);
 	}
 }
 

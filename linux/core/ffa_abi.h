@@ -25,28 +25,28 @@
  * All requests with FFA_MSG_SEND_DIRECT_REQ and FFA_MSG_SEND_DIRECT_RESP
  * are using the AArch32 SMC calling convention with register usage as
  * defined in FF-A specification:
- * w0:    Function ID (0x8400006F or 0x84000070)
- * w1:    Source/Destination IDs
- * w2:    Reserved (MBZ)
+ * w0:	Function ID (0x8400006F or 0x84000070)
+ * w1:	Source/Destination IDs
+ * w2:	Reserved (MBZ)
  * w3-w7: Implementation defined, free to be used below
  */
 
 #define TZ_FFA_VERSION_MAJOR 1
 #define TZ_FFA_VERSION_MINOR 0
 
-#define TZ_FFA_BLOCKING_CALL(id)    (id)
-#define TZ_FFA_YIELDING_CALL_BIT    31
-#define TZ_FFA_YIELDING_CALL(id)    ((id) | BIT(TZ_FFA_YIELDING_CALL_BIT))
+#define TZ_FFA_BLOCKING_CALL(id)	(id)
+#define TZ_FFA_YIELDING_CALL_BIT	31
+#define TZ_FFA_YIELDING_CALL(id)	((id) | BIT(TZ_FFA_YIELDING_CALL_BIT))
 
 /*
  * Returns the API version implemented, currently follows the FF-A version.
  * Call register usage:
- * w3:    Service ID, TZ_FFA_GET_API_VERSION
+ * w3:	Service ID, TZ_FFA_GET_API_VERSION
  * w4-w7: Not used (MBZ)
  *
  * Return register usage:
- * w3:    TZ_FFA_VERSION_MAJOR
- * w4:    TZ_FFA_VERSION_MINOR
+ * w3:	TZ_FFA_VERSION_MAJOR
+ * w4:	TZ_FFA_VERSION_MINOR
  * w5-w7: Not used (MBZ)
  */
 #define TZ_FFA_GET_API_VERSION TZ_FFA_BLOCKING_CALL(0)
@@ -59,15 +59,15 @@
  * Trusted OS, not of the API.
  *
  * Call register usage:
- * w3:    Service ID, TZ_FFA_GET_OS_VERSION
+ * w3:	Service ID, TZ_FFA_GET_OS_VERSION
  * w4-w7: Unused (MBZ)
  *
  * Return register usage:
- * w3:    CFG_TZ_REVISION_MAJOR
- * w4:    CFG_TZ_REVISION_MINOR
- * w5:    TEE_IMPL_GIT_SHA1 (or zero if not supported)
+ * w3:	CFG_TZ_REVISION_MAJOR
+ * w4:	CFG_TZ_REVISION_MINOR
+ * w5:	TEE_IMPL_GIT_SHA1 (or zero if not supported)
  */
-#define TZ_FFA_GET_OS_VERSION    TZ_FFA_BLOCKING_CALL(1)
+#define TZ_FFA_GET_OS_VERSION	TZ_FFA_BLOCKING_CALL(1)
 
 /*
  * Exchange capabilities between normal world and secure world.
@@ -76,15 +76,15 @@
  * capabilities may be added.
  *
  * Call register usage:
- * w3:    Service ID, TZ_FFA_EXCHANGE_CAPABILITIES
+ * w3:	Service ID, TZ_FFA_EXCHANGE_CAPABILITIES
  * w4-w7: Not used (MBZ)
  *
  * Return register usage:
- * w3:    Error code, 0 on success
- * w4:    Bit[7:0]:  Number of parameters needed for RPC to be supplied
- *                   as the second MSG arg struct for
- *                   TZ_FFA_YIELDING_CALL_WITH_ARG.
- *        Bit[31:8]: Reserved (MBZ)
+ * w3:	Error code, 0 on success
+ * w4:	Bit[7:0]:  Number of parameters needed for RPC to be supplied
+ *				   as the second MSG arg struct for
+ *				   TZ_FFA_YIELDING_CALL_WITH_ARG.
+ *		Bit[31:8]: Reserved (MBZ)
  * w5-w7: Not used (MBZ)
  */
 #define TZ_FFA_EXCHANGE_CAPABILITIES TZ_FFA_BLOCKING_CALL(2)
@@ -93,59 +93,59 @@
  * Unregister shared memory
  *
  * Call register usage:
- * w3:    Service ID, TZ_FFA_YIELDING_CALL_UNREGISTER_SHM
- * w4:    Shared memory handle, lower bits
- * w5:    Shared memory handle, higher bits
+ * w3:	Service ID, TZ_FFA_YIELDING_CALL_UNREGISTER_SHM
+ * w4:	Shared memory handle, lower bits
+ * w5:	Shared memory handle, higher bits
  * w6-w7: Not used (MBZ)
  *
  * Return register usage:
- * w3:    Error code, 0 on success
+ * w3:	Error code, 0 on success
  * w4-w7: Not used (MBZ)
  */
-#define TZ_FFA_UNREGISTER_SHM    TZ_FFA_BLOCKING_CALL(3)
+#define TZ_FFA_UNREGISTER_SHM	TZ_FFA_BLOCKING_CALL(3)
 
 /*
  * Call with struct TZ_msg_arg as argument in the supplied shared memory
  * with a zero internal offset and normal cached memory attributes
  * Register usage:
- * w3:    Service ID, TZ_FFA_YIELDING_CALL_WITH_ARG
- * w4:    Lower 32 bits of a 64-bit Shared memory handle
- * w5:    Upper 32 bits of a 64-bit Shared memory handle
- * w6:    Offset into shared memory pointing to a struct TZ_msg_arg
- *        right after the parameters of this struct (at offset
- *        TZ_MSG_GET_ARG_SIZE(num_params) follows a struct TZ_msg_arg
- *        for RPC, this struct has reserved space for the number of RPC
- *        parameters as returned by TZ_FFA_EXCHANGE_CAPABILITIES.
- * w7:    Not used (MBZ)
+ * w3:	Service ID, TZ_FFA_YIELDING_CALL_WITH_ARG
+ * w4:	Lower 32 bits of a 64-bit Shared memory handle
+ * w5:	Upper 32 bits of a 64-bit Shared memory handle
+ * w6:	Offset into shared memory pointing to a struct TZ_msg_arg
+ *		right after the parameters of this struct (at offset
+ *		TZ_MSG_GET_ARG_SIZE(num_params) follows a struct TZ_msg_arg
+ *		for RPC, this struct has reserved space for the number of RPC
+ *		parameters as returned by TZ_FFA_EXCHANGE_CAPABILITIES.
+ * w7:	Not used (MBZ)
  * Resume from RPC. Register usage:
- * w3:    Service ID, TZ_FFA_YIELDING_CALL_RESUME
+ * w3:	Service ID, TZ_FFA_YIELDING_CALL_RESUME
  * w4-w6: Not used (MBZ)
- * w7:    Resume info
+ * w7:	Resume info
  *
  * Normal return (yielding call is completed). Register usage:
- * w3:    Error code, 0 on success
- * w4:    TZ_FFA_YIELDING_CALL_RETURN_DONE
+ * w3:	Error code, 0 on success
+ * w4:	TZ_FFA_YIELDING_CALL_RETURN_DONE
  * w5-w7: Not used (MBZ)
  *
  * RPC interrupt return (RPC from secure world). Register usage:
- * w3:    Error code == 0
- * w4:    Any defined RPC code but TZ_FFA_YIELDING_CALL_RETURN_DONE
+ * w3:	Error code == 0
+ * w4:	Any defined RPC code but TZ_FFA_YIELDING_CALL_RETURN_DONE
  * w5-w6: Not used (MBZ)
- * w7:    Resume info
+ * w7:	Resume info
  *
  * Possible error codes in register w3:
- * 0:                       Success
- * FFA_DENIED:              w4 isn't one of TZ_FFA_YIELDING_CALL_START
- *                          TZ_FFA_YIELDING_CALL_RESUME
+ * 0:					  Success
+ * FFA_DENIED:			  w4 isn't one of TZ_FFA_YIELDING_CALL_START
+ *						  TZ_FFA_YIELDING_CALL_RESUME
  *
  * Possible error codes for TZ_FFA_YIELDING_CALL_START
- * FFA_BUSY:                Number of OP-TEE OS threads exceeded,
- *                          try again later
- * FFA_DENIED:              RPC shared memory object not found
- * FFA_INVALID_PARAMETER:   Bad shared memory handle or offset into the memory
+ * FFA_BUSY:			  Number of OP-TEE OS threads exceeded,
+ *						  try again later
+ * FFA_DENIED:			  RPC shared memory object not found
+ * FFA_INVALID_PARAMETER: Bad shared memory handle or offset into the memory
  *
  * Possible error codes for TZ_FFA_YIELDING_CALL_RESUME
- * FFA_INVALID_PARAMETER:   Bad resume info
+ * FFA_INVALID_PARAMETER: Bad resume info
  */
 #define TZ_FFA_YIELDING_CALL_WITH_ARG TZ_FFA_YIELDING_CALL(0)
 #define TZ_FFA_YIELDING_CALL_RESUME TZ_FFA_YIELDING_CALL(1)

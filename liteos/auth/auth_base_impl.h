@@ -21,16 +21,16 @@
 
 #if ((defined CONFIG_CLIENT_AUTH) || (defined CONFIG_TEECD_AUTH))
 
-#define CHECK_ACCESS_SUCC      0
-#define CHECK_ACCESS_FAIL      0xffff
+#define CHECK_ACCESS_SUCC	  0
+#define CHECK_ACCESS_FAIL	  0xffff
 #define CHECK_PATH_HASH_FAIL   0xff01
-#define CHECK_SECLABEL_FAIL    0xff02
+#define CHECK_SECLABEL_FAIL	0xff02
 #define CHECK_CODE_HASH_FAIL   0xff03
 #define ENTER_BYPASS_CHANNEL   0xff04
 
-#define BUF_MAX_SIZE           1024
-#define MAX_PATH_SIZE          512
-#define SHA256_DIGEST_LENGTH    32
+#define BUF_MAX_SIZE		   1024
+#define MAX_PATH_SIZE		  512
+#define SHA256_DIGEST_LENGTH	32
 
 int calc_task_hash(unsigned char *digest, uint32_t dig_len, LosTaskCB *cur_struct);
 

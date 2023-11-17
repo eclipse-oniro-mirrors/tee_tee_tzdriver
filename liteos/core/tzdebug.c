@@ -292,7 +292,7 @@ static int tz_memstat_open(struct inode *inode, struct file *file)
 }
 
 static const struct file_operations g_tz_dbg_memstat_fops = {
-	.open    = tz_memstat_open,
+	.open  = tz_memstat_open,
 };
 #endif
 

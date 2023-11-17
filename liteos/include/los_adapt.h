@@ -32,15 +32,15 @@
 #include "los_vm_phys.h"
 #include "mbedtls/sha256.h"
 
-#define TEECD_UID 97
+#define TEECD_UID 				97
 
-#define VERIFY_READ 0
-#define VERIFY_WRITE 1
-#define MAX_DEV_NAME_SIZE  32
-#define SHA256_DIGEST_LENGTH 32
+#define VERIFY_READ 			0
+#define VERIFY_WRITE 			1
+#define MAX_DEV_NAME_SIZE  		32
+#define SHA256_DIGEST_LENGTH 	32
 #define ALIGN_TZ(x, boundary) (((x) + ((boundary) - 1)) & ~((boundary) - 1))
 
-#define MISC_DYNAMIC_MINOR        255
+#define MISC_DYNAMIC_MINOR		255
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -58,7 +58,7 @@ int misc_register_adapt(struct miscdevice_adapt *misc_device);
 
 typedef pthread_mutex_t	 mutex_t;
 
-#define MAX_PATH_SIZE    512
+#define MAX_PATH_SIZE	512
 
 #ifndef IS_ERR_OR_NULL
 #ifndef IS_ERR_VALUE
