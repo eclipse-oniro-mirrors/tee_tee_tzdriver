@@ -26,7 +26,7 @@
 #define TUI_STATE_ERROR	    3
 
 #define TUI_PID_CLEAR       0
-#define TUI_PID		        1
+#define TUI_PID_CONFIG		1
 /* command from secure os */
 #define TUI_CMD_ENABLE	    1
 #define TUI_CMD_DISABLE	    2
@@ -55,14 +55,14 @@ enum tui_poll_type {
  * OS, for example the TUI CA maybe killed.
  */
 	TUI_POLL_CANCEL,
-	TUI_POLL_HANDLE_TUI, /* for tui to handle event */
+	TUI_POLL_HANDLE_TUI,  /* for tui to handle event */
 	TUI_POLL_NAVI_H_TO_S, /* for navigator hide and show */
 	TUI_POLL_NAVI_S_TO_H,
 	TUI_POLL_SHS_0_TO_1,  /* for single hand mode switch */
 	TUI_POLL_SHS_0_TO_2,
 	TUI_POLL_SHS_1_TO_0,
 	TUI_POLL_SHS_2_TO_0,
-	TUI_POLL_ROTATION_0, /* for retation switch */
+	TUI_POLL_ROTATION_0,  /* for retation switch */
 	TUI_POLL_ROTATION_90,
 	TUI_POLL_ROTATION_180,
 	TUI_POLL_ROTATION_270,
@@ -71,11 +71,11 @@ enum tui_poll_type {
 	TUI_POLL_SEMITRANS,
 	TUI_POLL_CURSOR,
 	TUI_POLL_GETFP,
-	TUI_POLL_NOTCH,	 /* for tui to get notch height */
+	TUI_POLL_NOTCH,	      /* for tui to get notch height */
 	TUI_POLL_DIALOGTIMEOUT,
-	TUI_POLL_FOLD,	  /* for tui to get fold_screen */
-	TUI_POLL_MAX		/* Do Not add type behind this one */
-}
+	TUI_POLL_FOLD,	      /* for tui to get fold_screen */
+	TUI_POLL_MAX		  /* Do Not add type behind this one */
+};
 
 /* tui max should be bigger than TUI_POLL_MAX in tui.h */
 static const char *const poll_event_type_name[] = {
@@ -145,7 +145,7 @@ struct tui_msg_node {
 	struct list_head list;
 };
 
-typedef int (*tui_drv_init) (void *pdate, int secure);
+typedef int (*tui_drv_init) (void *pdata, int secure);
 
 struct tui_drv_node {
 	tui_drv_init init_func;

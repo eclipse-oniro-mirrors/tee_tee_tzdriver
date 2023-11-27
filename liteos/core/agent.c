@@ -711,7 +711,7 @@ int tc_ns_register_agent(struct tc_ns_dev_file *dev_file,
 	if (!buffer)
 		return ret;
 
-	if (user_agent && (buffer_size > SZ_4Z)) {
+	if (user_agent && (buffer_size > SZ_4K)) {
 		tloge("size: %u of user agent's shared mem is invalid\n", 
 			buffer_size);
 		return ret;
