@@ -15,10 +15,10 @@
 #ifndef INTERNAL_FUNCTIONS_H
 #define INTERNAL_FUNCTIONS_H
 
-#include <linux/dlm_device.h>
+#include <linux/device.h>
 #include <securec.h>
-#include <teek_ns_client.h>
-#include <teek_client_constants.h>
+#include "teek_ns_client.h"
+#include "teek_client_constants.h"
 
 #ifndef CONFIG_TEE_FAULT_MANAGER
 static inline void fault_monitor_start(int32_t type)
@@ -33,8 +33,8 @@ static inline void fault_monitor_end(void)
 }
 #endif
 
-#ifdef CONFIG_KTHREAD_AFFNITY
-#include "tzkthread_affinity.h"
+#ifdef CONFIG_KTHREAD_AFFINITY
+#include "tz_kthread_affinity.h"
 #else
 static inline void init_kthread_cpumask(void)
 {
@@ -45,14 +45,15 @@ static inline void tz_kthread_bind_mask(struct task_struct *kthread)
 	(void)kthread;
 }
 
-static inline void tz_workqueue_bing_mask(struct workqueue_struct *wq, 
+static inline void tz_workqueue_bind_mask(struct workqueue_struct *wq, 
 	uint32_t flag)
 {
 	(void)wq;
 	(void)flag;
 }
+#endif
 
-#ifdef CONFIG_LINEPATCH_ENABLE
+#ifdef CONFIG_LIVEPATCH_ENABLE
 #include "livepatch_cmd.h"
 #else
 static inline int livepatch_init(const struct device *dev)
@@ -107,4 +108,5 @@ static inline void free_reboot_thread(void)
 {
 	return;
 }
+#endif
 #endif
