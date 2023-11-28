@@ -44,12 +44,12 @@ CONFIG_THIRDPARTY_COMPATIBLE=y
 
 | 参数                         | 说明                                                         |
 | ---------------------------- | ------------------------------------------------------------ |
-| CONFIG_TZDRIVER              | Tzdriver模块开关                                             |
-| CONFIG_CPU_AFF_NR            | CA绑核功能，非零值代表限制仅cpuid小于CONFIG_CPU_AFF_NR的CPU可以进入TEE，0代表无限制，当前只支持在0核运行，所以值为1 |
-| CONFIG_KERNEL_CLIENT         | 支持内核CA选项                                               |
-| CONFIG_TEELOG                | TEE日志开关，默认建议开启                                    |
-| CONFIG_PAGES_MEM             | TEE日志内存管理，默认建议开启                                |
-| CONFIG_THIRDPARTY_COMPATIBLE | 兼容第三方opteed的适配，例如适配RK3568芯片需要开启此选项     |
+| CONFIG_TZDRIVER              | Tzdriver模块开关。                                             |
+| CONFIG_CPU_AFF_NR            | CA绑核功能，非零值代表限制仅cpuid小于CONFIG_CPU_AFF_NR的CPU可以进入TEE，0代表无限制，当前只支持在0核运行，所以值为1。 |
+| CONFIG_KERNEL_CLIENT         | 支持内核CA选项。                                               |
+| CONFIG_TEELOG                | TEE日志开关，建议开启。                                    |
+| CONFIG_PAGES_MEM             | TEE日志内存管理，建议开启。                                |
+| CONFIG_THIRDPARTY_COMPATIBLE | 兼容第三方opteed的适配，例如适配RK3568芯片需要开启此选项。     |
 
 ## 编译命令
 
