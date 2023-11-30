@@ -3,11 +3,11 @@ config DYNAMIC_ION
 	default n
 	depends on TZDRIVER
 	help
-		TEEOS dynamic ion
+	  TEEOS dynamic ion
 
 config STATIC_ION
 	bool "Static Ion Feature"
 	default n
 	depends on TZDRIVER
 	help
-		TEEOS static ion
+	  TEEOS static ion

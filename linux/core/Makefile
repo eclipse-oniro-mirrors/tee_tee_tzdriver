@@ -4,17 +4,18 @@ ifneq ($(TARGET_BUILD_VARIANT), user)
 	ccflags-y += -DDEF_ENG
 endif
 
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver/agent_rpmb/core
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver/auth
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver/tlogger
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver/tui
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver/ion
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver/core
-EXTRA_CFLAGS += -I$(KERNEL_DIR)/drivers/platform_drivers/tzdriver/include
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../third_party/bounds_checking_function/include
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/agent_rpmb/core
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/auth
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/tlogger
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/tui
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/ion
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/core
+EXTRA_CFLAGS += -I$(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/include
 
 ifeq ($(CONFIG_TZDRIVER_INTERNAL), y)
-	include $(KERNEL_DIR)/drivers/platform_drivers/tzdriver/tzdriver_internal/internal.mk
+	include $(KERNEL_DIR)/../../../../base/tee/tee_tzdriver/linux/tzdriver_internal/internal.mk
 endif
 
 obj-y += teek_client_api.o

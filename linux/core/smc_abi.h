@@ -14,5 +14,6 @@
 #define SMC_ABI_H
 
 #include "smc_call.h"
+#define TEE_EXIT_REASON_CRASH 0x4
 void do_smc_transport(struct smc_in_params *in, struct smc_out_params *out, uint8_t wait);
 #endif
