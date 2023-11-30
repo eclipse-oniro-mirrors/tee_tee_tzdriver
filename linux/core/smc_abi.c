@@ -83,7 +83,32 @@ void do_smc_transport(struct smc_in_params *in, struct smc_out_params *out, uint
 }
 #endif
 
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+static void fix_params_offset(struct smc_out_params *out_param)
+{
+	out_param->target = out_param->ta;
+	out_param->ta = out_param->exit_reason;
+	out_param->exit_reason = out_param->ret;
+	out_param->ret = TSP_RESPONSE;
+	if (out_param->exit_reason == TEE_EXIT_REASON_CRASH) {
+		union crash_inf temp_info;
+		temp_info.crash_reg[0] = out_param->ta;
+		temp_info.crash_reg[1] = 0;
+		temp_info.crash_reg[2] = out_param->target;
+		temp_info.crash_msg.far = temp_info.crash_msg.elr;
+		temp_info.crash_msg.elr = 0;
+		out_param->ret = TSP_CRASH;
+		out_param->exit_reason = temp_info.crash_reg[0];
+		out_param->ta = temp_info.crash_reg[1];
+		out_param->target = temp_info.crash_reg[2];
+	}
+}
+#endif
+
 void smc_req(struct smc_in_params *in, struct smc_out_params *out, uint8_t wait)
 {
 	do_smc_transport(in, out, wait);
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	fix_params_offset(&out_param);
+#endif
 }

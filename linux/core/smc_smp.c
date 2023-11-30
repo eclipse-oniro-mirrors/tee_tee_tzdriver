@@ -165,7 +165,12 @@ enum smc_ops_exit {
 	SMC_EXIT_PREEMPTED	    = 0x1,
 	SMC_EXIT_SHADOW		    = 0x2,
 	SMC_EXIT_ABORT		    = 0x3,
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	SMC_EXIT_CRASH          = 0x4,
+	SMC_EXIT_MAX            = 0x5,
+#else
 	SMC_EXIT_MAX			= 0x4,
+#endif
 };
 
 #define SHADOW_EXIT_RUN			 	0x1234dead
@@ -821,6 +826,12 @@ retry:
 
 static uint64_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr, uint32_t cmd_type, uint8_t wait)
 {
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	if (g_sys_crash) {
+		out_param->ret = TSP_CRASH;
+		return out_param->ret;
+	}
+#endif
 	uint64_t ret = 0;
 	struct smc_in_params in_param = { cmd, cmd_addr, cmd_type, cmd_addr >> ADDR_TRANS_NUM };
 	struct smc_out_params out_param = { ret };
@@ -1021,6 +1032,13 @@ static void shadow_wo_pm(const void *arg, struct smc_out_params *out_params,
 	tlogd("%s: [cpu %d] x0=%lx x1=%lx x2=%lx x3=%lx x4=%lx\n",
 		__func__, raw_smp_processor_id(), in_params.x0, in_params.x1,
 		in_params.x2, in_params.x3, in_params.x4);
+
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	if (g_sys_crash) {
+		out_params->ret = TSP_CRASH;
+		return;
+	}
+#endif
 
 	smc_req(&in_params, out_params, 0);
 }
