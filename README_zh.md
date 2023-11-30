@@ -1,10 +1,24 @@
-# Tzdriver组件
+# Tzdriver驱动
 
 ## 简介
 
 Tzdriver是部署在REE侧的内核驱动，支持REE和TEE之间通信。Tzdriver处理来自于Tee Client的命令，发送指令从REE切换到TEE。Tzdriver通过管理共享内存，支持REE和TEE之间共享数据。
 
-图1 Tzdriver组件架构图
+Tzdriver驱动包含如下主要模块：
+
+smc：发送smc指令，将CPU从REE侧切换到TEE侧运行。
+
+session_manager：管理REE与TEE之间的通信会话。
+
+mailbox：REE和TEE之间通过mailbox共享数据。
+
+cmd_monitor：监控smc指令的运行，提供超时检测机制。
+
+tzdebug：创建debugfs调试节点，方便开发人员调试TEE功能。
+
+tlogger：TEE日志驱动模块，支持TEE日志记录和打印。
+
+图1 Tzdriver驱动架构图
 
 ![](figures/tzdriver.drawio.png)
 
@@ -53,7 +67,7 @@ CONFIG_THIRDPARTY_COMPATIBLE=y
 
 ## 编译命令
 
-Tzdriver部件跟随kernel一起编译，以rk3568为例，可以单独编译boot_linux.img，编译命令如下
+Tzdriver驱动跟随kernel一起编译，以rk3568为例，可以单独编译boot_linux.img，编译命令如下
 
 ```
 ./build.sh --product-name rk3568 --ccache --build-target kernel --gn-args linux_kernel_version=\"linux-5.10\"
