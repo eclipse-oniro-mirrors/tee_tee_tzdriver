@@ -20,6 +20,7 @@ config TEE_LOG_EXCEPTION
 	  Log exception info to imonitor
 
 choice
+
 	prompt "Register tee log Mem"
 	default PAGES_MEM
 	depends on TEELOG
@@ -42,3 +43,4 @@ config PAGES_MEM
 	  Register pages log mem
 
 endchoice
+

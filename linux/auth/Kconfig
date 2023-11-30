@@ -11,18 +11,18 @@ config ANDROID_HIDL
 	default n
 	depends on CLIENT_AUTH
 	help
-		TEEOS hidl proc auth
+	  TEEOS hidl proc auth
 
 config CADAEMON_AUTH
 	bool "Teec Daemon Path Hash Auth"
 	default n
 	depends on TZDRIVER
 	help
-		TEEOS TEECD path hash auth
+	  TEEOS TEECD path hash auth
 
 config TZDRIVER_OHOS
 	bool "Is in OH"
 	default n
 	depends on TZDRIVER
 	help
-		OH Cadaemon uid
+	  OH Cadaemon uid

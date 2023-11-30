@@ -100,7 +100,7 @@ void cmd_monitor_ta_crash(int32_t type, const uint8_t *ta_uuid, uint32_t uuid_le
 {
 	g_tee_detect_ta_crash = type;
 	if (g_tee_detect_ta_crash != TYPE_CRASH_TEE &&
-		ta_uuid != NULL && uuid_len == sizeof(struct tc_uuid)) {
+		ta_uuid != NULL && uuid_len == sizeof(struct tc_uuid))
 		(void)memcpy_s(&g_crashed_ta_uuid, sizeof(g_crashed_ta_uuid),
 			ta_uuid, uuid_len);
 	tzdebug_archivelog();
@@ -270,7 +270,7 @@ static void memstat_work(struct work_struct *work)
 	memstat_report();
 }
 
-static void cmd_monitor_reset_context(void)
+void cmd_monitor_reset_context(void)
 {
 	struct cmd_monitor *monitor = NULL;
 	pid_t pid = current->tgid;
