@@ -98,6 +98,29 @@ struct tc_ns_smc_queue {
 	struct tc_ns_smc_cmd out[MAX_SMC_CMD];
 };
 
+#define SYM_NAME_LEN_MAX 16
+#define SYM_NAME_LEN_1 7
+#define SYM_NAME_LEN_2 4
+#define CRASH_REG_NUM 3
+#define LOW_FOUR_BITE 4
+
+union crash_inf {
+	uint64_t crash_reg[CRASH_REG_NUM];
+	struct {
+		uint8_t halt_reason : LOW_FOUR_BITE;
+		uint8_t app : LOW_FOUR_BITE;
+		char sym_name[SYM_NAME_LEN_1];
+		uint16_t off;
+		uint16_t size;
+		uint32_t far;
+		uint32_t fault;
+		union {
+			char sym_name_append[SYM_NAME_LEN_2];
+			uint32_t elr;
+		};
+	} crash_msg;
+};
+
 #define RESLEEP_TIMEOUT 15
 
 bool sigkill_pending(struct task_struct *tsk);

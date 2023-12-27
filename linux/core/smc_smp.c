@@ -155,49 +155,26 @@ static uint32_t g_siq_queue[MAX_SIQ_NUM];
 DEFINE_MUTEX(g_siq_lock);
 
 enum smc_ops_exit {
-	SMC_OPS_NORMAL   		= 0x0,
+	SMC_OPS_NORMAL   	= 0x0,
 	SMC_OPS_SCHEDTO     	= 0x1,
 	SMC_OPS_START_SHADOW	= 0x2,
 	SMC_OPS_START_FIQSHD	= 0x3,
-	SMC_OPS_PROBE_ALIVE	    = 0x4,
-	SMC_OPS_ABORT_TASK	    = 0x5,
-	SMC_EXIT_NORMAL		    = 0x0,
-	SMC_EXIT_PREEMPTED	    = 0x1,
-	SMC_EXIT_SHADOW		    = 0x2,
-	SMC_EXIT_ABORT		    = 0x3,
+	SMC_OPS_PROBE_ALIVE	= 0x4,
+	SMC_OPS_ABORT_TASK	= 0x5,
+	SMC_EXIT_NORMAL		= 0x0,
+	SMC_EXIT_PREEMPTED	= 0x1,
+	SMC_EXIT_SHADOW		= 0x2,
+	SMC_EXIT_ABORT		= 0x3,
 #ifdef CONFIG_THIRDPARTY_COMPATIBLE
 	SMC_EXIT_CRASH          = 0x4,
 	SMC_EXIT_MAX            = 0x5,
 #else
-	SMC_EXIT_MAX			= 0x4,
+	SMC_EXIT_MAX		= 0x4,
 #endif
 };
 
 #define SHADOW_EXIT_RUN			 	0x1234dead
 #define SMC_EXIT_TARGET_SHADOW_EXIT 0x1
-
-#define SYM_NAME_LEN_MAX 16
-#define SYM_NAME_LEN_1 7
-#define SYM_NAME_LEN_2 4
-#define CRASH_REG_NUM 3
-#define LOW_FOUR_BITE 4
-
-union crash_inf {
-	uint64_t crash_reg[CRASH_REG_NUM];
-	struct {
-		uint8_t halt_reason : LOW_FOUR_BITE;
-		uint8_t app : LOW_FOUR_BITE;
-		char sym_name[SYM_NAME_LEN_1];
-		uint16_t off;
-		uint16_t size;
-		uint32_t far;
-		uint32_t fault;
-		union {
-			char sym_name_append[SYM_NAME_LEN_2];
-			uint32_t elr;
-		};
-	} crash_msg;
-};
 
 #define compile_time_assert(cond, msg) typedef char g_assert_##msg[(cond) ? 1 : -1]
 
@@ -826,15 +803,15 @@ retry:
 
 static uint64_t send_smc_cmd(uint32_t cmd, phys_addr_t cmd_addr, uint32_t cmd_type, uint8_t wait)
 {
-#ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	if (g_sys_crash) {
-		out_param->ret = TSP_CRASH;
-		return out_param->ret;
-	}
-#endif
 	uint64_t ret = 0;
 	struct smc_in_params in_param = { cmd, cmd_addr, cmd_type, cmd_addr >> ADDR_TRANS_NUM };
 	struct smc_out_params out_param = { ret };
+#ifdef CONFIG_THIRDPARTY_COMPATIBLE
+	if (g_sys_crash) {
+		out_param.ret = TSP_CRASH;
+		return out_param.ret;
+	}
+#endif
 	smc_req(&in_param, &out_param, wait);
 	ret = out_param.ret;
 	return ret;
@@ -1039,7 +1016,6 @@ static void shadow_wo_pm(const void *arg, struct smc_out_params *out_params,
 		return;
 	}
 #endif
-
 	smc_req(&in_params, out_params, 0);
 }
 

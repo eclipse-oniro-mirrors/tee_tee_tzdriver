@@ -12,7 +12,9 @@
  */
 #include <linux/arm-smccc.h>
 #include "smc_call.h"
+#include "smc_smp.h"
 #include "teek_ns_client.h"
+#include "smc_abi.h"
 
 #ifndef CONFIG_ARCH32
 void do_smc_transport(struct smc_in_params *in, struct smc_out_params *out, uint8_t wait)
@@ -109,6 +111,6 @@ void smc_req(struct smc_in_params *in, struct smc_out_params *out, uint8_t wait)
 {
 	do_smc_transport(in, out, wait);
 #ifdef CONFIG_THIRDPARTY_COMPATIBLE
-	fix_params_offset(&out_param);
+	fix_params_offset(out);
 #endif
 }
