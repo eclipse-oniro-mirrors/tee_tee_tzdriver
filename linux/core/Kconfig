@@ -61,3 +61,10 @@ config FFA_SUPPORT
 	depends on TZDRIVER
 	help
 	  FFA Support Enable
+
+config THIRDPARTY_COMPATIBLE
+	bool "Compatible with OPTEE"
+	default n
+	depends on TZDRIVER
+	help
+	  Compatible with OPTEE

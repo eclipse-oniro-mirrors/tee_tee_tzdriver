@@ -27,11 +27,11 @@ config ASAN_DEBUG
 	help
 	  Macro defined for ASAN debug version
 
-source  "../../../../base/tee/tee_tzdriver/linux/auth/Kconfig"
-source  "../../../../base/tee/tee_tzdriver/linux/core/Kconfig"
-source  "../../../../base/tee/tee_tzdriver/linux/tlogger/Kconfig"
-source  "../../../../base/tee/tee_tzdriver/linux/agent_rpmb/Kconfig"
-source  "../../../../base/tee/tee_tzdriver/linux/ion/Kconfig"
-source  "../../../../base/tee/tee_tzdriver/linux/tui/Kconfig"
+source  "drivers/tzdriver/auth/Kconfig"
+source  "drivers/tzdriver/core/Kconfig"
+source  "drivers/tzdriver/tlogger/Kconfig"
+source  "drivers/tzdriver/agent_rpmb/Kconfig"
+source  "drivers/tzdriver/ion/Kconfig"
+source  "drivers/tzdriver/tui/Kconfig"
 endmenu
 
